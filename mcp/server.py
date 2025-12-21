@@ -1,21 +1,19 @@
+import json
 from typing import Annotated
 from fastmcp import FastMCP
 
+from syntax_lark import GrammoParser
 mcp = FastMCP("grammo-mcp", strict_input_validation=True)
 
+parser_instance = GrammoParser()
 @mcp.tool(
       name="validate_syntax_grammo",
       description="Check the correctness of Grammo syntax requires the code as input",
       enabled=True
 )
 def syntax_checker(code: Annotated[str, "The generated Grammo Code"]) -> dict:
-   return {
-      "passed": True,
-      "info": "",
-      "warning": "",
-      "errors": ""
-   }
-
+   result = parser_instance.validate(code)
+   return json.dumps(result, indent=2)
 
 @mcp.tool(
       name="grammo_compiler",
@@ -30,7 +28,7 @@ def syntax_checker(code: Annotated[str, "The generated Grammo Code"]) -> dict:
       "errors": ""
    }
 
-   
+
 
 if __name__ == "__main__":
    mcp.run(transport="http", host="0.0.0.0", port=8000)
