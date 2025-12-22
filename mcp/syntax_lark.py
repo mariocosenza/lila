@@ -119,7 +119,7 @@ class GrammoParser:
                 "error_type": "Syntax Error",
                 "line": u.line,
                 "column": u.column,
-                "expected": sorted(list(u.expected)),
+                "expected": sorted(u.expected),
                 "context": context,
                 "message": f"Unexpected input at line {u.line}, column {u.column}. Expected one of: {u.expected}"
             }
@@ -131,7 +131,7 @@ class GrammoParser:
                 "line": t.line,
                 "column": t.column,
                 "token": str(t.token),
-                "expected": sorted(list(t.expected)),
+                "expected": sorted(t.expected),
                 "message": f"Unexpected token '{t.token}' at line {t.line}. Expected: {t.expected}"
             }
             

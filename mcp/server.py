@@ -7,20 +7,20 @@ mcp = FastMCP("grammo-mcp", strict_input_validation=True)
 
 parser_instance = GrammoParser()
 @mcp.tool(
-      name="validate_syntax_grammo",
+      name="grammo_lark",
       description="Check the correctness of Grammo syntax requires the code as input",
       enabled=True
 )
 def syntax_checker(code: Annotated[str, "The generated Grammo Code"]) -> dict:
    result = parser_instance.validate(code)
-   return json.dumps(result, indent=2)
+   return result
 
 @mcp.tool(
       name="grammo_compiler",
       description="Compile the code and return the compiled status",
       enabled=True
 )
-def syntax_checker(code: Annotated[str, "The generated Grammo Code"]) -> dict:
+def compiler(code: Annotated[str, "The generated Grammo Code"]) -> dict:
    return {
       "compiled": True,
       "info": "",
