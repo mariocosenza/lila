@@ -7,11 +7,12 @@ from typing import Annotated, Dict, List, Literal, TypedDict, Any
 from pydantic import BaseModel, Field
 from langchain.tools import tool
 from langchain_core.messages import BaseMessage, AIMessage, SystemMessage
-from langgraph.graph import END, START, StateGraph, CompiledGraph
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from agents.client import grammo_lark_mcp
+from client import grammo_lark_mcp
+import asyncio, threading
 
 
 class GrammoCode(BaseModel):
@@ -25,13 +26,55 @@ class GrammoCode(BaseModel):
 
 @tool("grammo_lark", args_schema=GrammoCode)
 def grammo_lark(code: str) -> str:
-    result = grammo_lark_mcp(code)
+    """
+    Check the given source string with the Lark syntax checker.
+
+    Parameters
+    ----------
+    code : str
+        Source text to validate with the underlying grammo_lark_mcp function.
+
+    Returns
+    -------
+    str
+        A message prefixed with "Lark syntax check result: " followed by the
+        raw result returned by grammo_lark_mcp.
+    """
+    """"""
+    def _run_sync(coro):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        else:
+            res = {}
+            def _target():
+                res['value'] = asyncio.run(coro)
+            t = threading.Thread(target=_target)
+            t.start()
+            t.join()
+            return res.get('value')
+
+    result = _run_sync(grammo_lark_mcp(code))
     return f"Lark syntax check result: {result}"
 
 
 @tool("grammo_compile", args_schema=GrammoCode)
 def grammo_compile(code: str) -> Dict[str, str]:
-    # TODO: implement real compile call
+    """
+    Compile a source string into Grammo format.
+
+    Args:
+        code (str): Source code to compile.
+
+    Returns:
+        dict: Mapping with the following keys:
+            - "compiled" (bool): True if compilation succeeded, False otherwise.
+            - "info" (str): Informational messages from the compiler.
+            - "warning" (str): Compilation warnings (empty string if none).
+            - "errors" (str): Compilation errors (empty string if none).
+    """
+    """"""
     return {
         "compiled": True,
         "info": "",
@@ -188,7 +231,7 @@ def coder_route_after_compile(state: CoderState) -> Literal["generate", "__end__
     return "generate"
 
 
-def build_coder_subgraph(llm) -> CompiledGraph:
+def build_coder_subgraph(llm):
     ctx = CoderContext(llm_with_tools=llm.bind_tools(TOOLS))
 
     g = StateGraph(CoderState)

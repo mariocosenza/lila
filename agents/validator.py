@@ -9,7 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from agents.integrator import GRAMMO_LARK_SPEC
+from integrator import GRAMMO_LARK_SPEC
 from coder import grammo_compile, TOOLS as CODER_TOOLS
 
 

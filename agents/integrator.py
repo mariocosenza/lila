@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import partial
 from typing import Annotated, Any, Dict, List, Literal, TypedDict
-from langgraph.graph import CompiledGraph
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -272,7 +271,7 @@ def integrator_route_after_compile(state: IntegratorState) -> Literal["generate"
     return "generate"
 
 
-def build_integrator_subgraph(llm) -> CompiledGraph:
+def build_integrator_subgraph(llm):
     ctx = IntegratorContext(llm_with_tools=llm.bind_tools(CODER_TOOLS))
 
     g = StateGraph(IntegratorState)

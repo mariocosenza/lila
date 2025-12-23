@@ -1,15 +1,14 @@
-# tester_server.py
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from langchain_core.messages import HumanMessage
 
-from tester_agent import build_tester_graph
+from tester import build_tester_graph
 
 
 class A2ARequest(BaseModel):
@@ -25,7 +24,7 @@ class A2AResponse(BaseModel):
 def create_app() -> FastAPI:
     app = FastAPI(title="Tester A2A Server")
 
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
     graph = build_tester_graph(gemini_model=gemini_model)
 
     @app.post("/a2a/invoke", response_model=A2AResponse)

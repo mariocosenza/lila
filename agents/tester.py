@@ -12,7 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from agents.integrator import GRAMMO_LARK_SPEC
+from integrator import GRAMMO_LARK_SPEC
 
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
@@ -29,6 +29,41 @@ class RunTestsInput(BaseModel):
 
 @tool("run_grammo_tests", args_schema=RunTestsInput)
 def run_grammo_tests(code: str, tests: str) -> Dict[str, Any]:
+    """
+    Run Grammo tests against provided source code.
+
+    Parameters
+    ----------
+    code : str
+        Source code to be tested (e.g., module source or program text).
+    tests : str
+        Test definitions or test-suite content (e.g., test cases, assertions, or
+        commands) that the runner will execute against `code`.
+
+    Returns
+    -------
+    Dict[str, Any]
+        Result dictionary containing at minimum:
+        - "passed" (bool): True if all tests passed, False otherwise.
+        - "stdout" (str): Captured standard output from the test run.
+        - "stderr" (str): Captured standard error from the test run.
+        Additional keys may be added by real implementations (e.g., detailed
+        failure reports, execution time, exit codes).
+
+    Raises
+    ------
+    ValueError
+        If `code` or `tests` are empty or otherwise invalid.
+    RuntimeError
+        If the test execution environment cannot be initialized or the runner
+        encounters an unexpected internal error.
+
+    Notes
+    -----
+    This function is currently a placeholder; replace with real integration to your
+    toolchain to execute tests and collect results.
+    """
+    """"""
     # TODO: implement real test execution against your toolchain.
     return {"passed": True, "stdout": "", "stderr": ""}
 
@@ -118,7 +153,7 @@ def tester_collect(state: TesterState) -> Dict:
     return {"tests": tests_text, "test_result": result}
 
 
-def build_tester_graph(gemini_model: str = "gemini-1.5-pro") -> "langgraph.graph.CompiledGraph":
+def build_tester_graph(gemini_model: str = "gemini-1.5-pro"):
     llm = build_gemini_llm(model=gemini_model)
     ctx = TesterContext(llm_with_tools=llm.bind_tools(TOOLS))
 
