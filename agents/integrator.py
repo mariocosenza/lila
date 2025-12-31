@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import partial
 from typing import Annotated, Any, Dict, List, Literal, TypedDict
+import re
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from coder import grammo_lark, grammo_compile, TOOLS as CODER_TOOLS
+from coder import grammo_compile, TOOLS as CODER_TOOLS
 
 
 class IntegratorState(TypedDict, total=False):
@@ -33,6 +34,17 @@ GRAMMO_LARK_SPEC = """\
 // =============================
 // Grammo - Lark Grammar
 // =============================
+//
+// ### CANONICAL USAGE EXAMPLE ###
+// func void -> main() {
+//    var int: n, r;
+//    >> "Inserisci n: " # (n);   // Input pattern: Prompt string + Hash-Var
+//    r = fact(n);
+//    <<! "fact(n)=" # (r);       // Output pattern: Label string + Hash-Var
+//    return;
+// }
+// =============================
+
 start: program
 // -----------------------------
 // Program structure
@@ -160,7 +172,7 @@ ID: /[a-zA-Z_][a-zA-Z0-9_]*/
 // Whitespace & comments
 %import common.WS
 %ignore WS
-COMMENT: /\\/\\/[^\n]*/
+COMMENT: /\\/\\/[^\\n]*/
 COMMENT_BLOCK: /\\/\\*(.|\\n)*?\\*\\//
 %ignore COMMENT
 %ignore COMMENT_BLOCK
@@ -171,15 +183,19 @@ INTEGRATOR_SYSTEM = SystemMessage(
     content=(
         "You are INTEGRATOR.\n"
         "You are only used after the planner.\n"
-        "Task: put together existing generated code into ONE working Grammo program.\n"
-        "Rules:\n"
+        "Task: put together existing generated code into ONE working Grammo program.\n\n"
+        "### RULES\n"
         "- FOLLOW THE LARK SPEC EXACTLY.\n"
+        "- **MANDATORY I/O STYLE:** Use `>> \"Prompt\" # (var);` for inputs and `<< \"Label\" # (var);` for outputs.\n"
         "- Change the MINIMUM amount of code to make it work.\n"
-        "- Keep identifiers and structure stable unless required.\n"
-        "- Validate syntax using `grammo_lark` and fix until valid.\n"
-        "- Then compilation will run; if compilation fails, fix with minimal edits (max 3 attempts).\n"
-        "- Output ONLY the final Grammo source code (no markdown).\n\n"
-        "LARK SPECIFICATION:\n"
+        "- CRITICAL: Ensure there is EXACTLY ONE 'main' function.\n"
+        "- Validate syntax using `grammo_lark`.\n\n"
+        "### CRITICAL OUTPUT RULES (STRICT ENFORCEMENT)\n"
+        "1. **NO MARKDOWN:** Do NOT use code fences.\n"
+        "2. **NO META-DATA:** Do NOT include `SUMMARY:`, `SAFETY:`, `EXPLANATION:`, or `NOTES:`.\n"
+        "3. **PURE SOURCE:** The entire output must be valid compilable code. If you include English text, the compiler will crash.\n"
+        "4. **START IMMEDIATELY:** Start with the code logic.\n\n"
+        "LARK SPECIFICATION & EXAMPLES:\n"
         f"{GRAMMO_LARK_SPEC}"
     )
 )
@@ -188,6 +204,42 @@ INTEGRATOR_SYSTEM = SystemMessage(
 @dataclass(frozen=True)
 class IntegratorContext:
     llm_with_tools: object
+
+
+def _sanitize_grammo_source(text: str) -> str:
+    """Best-effort sanitizer to ensure only Grammo source is compiled.
+
+    Removes markdown fences and drops leading natural-language/meta lines until
+    the first plausible top-level declaration (`func` or `var`).
+    """
+    if text is None:
+        return ""
+
+    s = str(text).strip()
+    if not s:
+        return ""
+
+    if '```' in s:
+        m = re.search(r"```(?:\w+)?\s*\n(.*?)\n```", s, flags=re.DOTALL)
+        if m:
+            s = m.group(1).strip()
+        else:
+            s = s.replace('```', '').strip()
+
+    lines = s.splitlines()
+    start_idx = None
+    for i, line in enumerate(lines):
+        line_s = line.lstrip()
+        if not line_s:
+            continue
+        if line_s.startswith(('func', 'var')):
+            start_idx = i
+            break
+
+    if start_idx is not None and start_idx > 0:
+        s = "\n".join(lines[start_idx:]).strip()
+
+    return s
 
 
 def ensure_system(messages: List[BaseMessage]) -> List[BaseMessage]:
@@ -201,8 +253,8 @@ def integrator_generate(ctx: IntegratorContext, state: IntegratorState) -> Dict:
     ai: AIMessage = ctx.llm_with_tools.invoke(msgs)
 
     iters = int(state.get("iterations", 0)) + 1
-    max_iters = int(state.get("max_iters", 10))
-    code = (ai.content or "").strip()
+    max_iters = int(state.get("max_iters", 5))
+    code = _sanitize_grammo_source(ai.content or "")
 
     return {
         "messages": [ai],
@@ -215,7 +267,7 @@ def integrator_generate(ctx: IntegratorContext, state: IntegratorState) -> Dict:
 
 def integrator_route_after_generate(state: IntegratorState) -> Literal["tools", "compile", "__end__"]:
     iters = int(state.get("iterations", 0))
-    max_iters = int(state.get("max_iters", 10))
+    max_iters = int(state.get("max_iters", 5))
     if iters >= max_iters:
         return "__end__"
 
@@ -230,7 +282,7 @@ def integrator_route_after_generate(state: IntegratorState) -> Literal["tools", 
 
 
 def integrator_compile(state: IntegratorState) -> Dict:
-    code = (state.get("assembled_code") or state.get("code") or "").strip()
+    code = _sanitize_grammo_source(state.get("assembled_code") or state.get("code") or "")
     result = grammo_compile.invoke({"code": code})
 
     attempts = int(state.get("compile_attempts", 0)) + 1
