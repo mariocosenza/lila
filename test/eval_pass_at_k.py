@@ -14,6 +14,7 @@ from __future__ import annotations
 import sys
 import json
 import asyncio
+import uuid
 from pathlib import Path
 from typing import List, Dict, Any
 from math import comb
@@ -153,11 +154,11 @@ async def generate_samples(app, task_prompt: str, num_samples: int) -> List[str]
         try:
             print(f"  Generating sample {i+1}/{num_samples}...", end=" ")
             
-            # Invoca l'app con il prompt del task
+            thread_id = str(uuid.uuid4())
             result = await asyncio.to_thread(
                 app.invoke,
                 {"messages": [HumanMessage(content=task_prompt)]},
-                config={"configurable": {"stream_tokens": False}}
+                config={"configurable": {"stream_tokens": False, "thread_id": thread_id}}
             )
             
             # Estrai il codice generato
