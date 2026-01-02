@@ -2,8 +2,8 @@
 
 ![License](https://img.shields.io/github/license/mariocosenza/lila?style=for-the-badge&color=blueviolet)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
-![LangChain](https://img.shields.io/badge/🦜🔗%20LangChain-0.1.0-green?style=for-the-badge)
-![LangGraph](https://img.shields.io/badge/LangGraph-Alpha-orange?style=for-the-badge)
+![LangChain](https://img.shields.io/badge/🦜🔗%20LangChain-1.2.0-green?style=for-the-badge)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.0.5-orange?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active_Development-success?style=for-the-badge)
 
 **LILA** is an advanced, autonomous multi-agent coding system designed to master **Grammo**, a custom programming language that compiles to LLVM IR. 
