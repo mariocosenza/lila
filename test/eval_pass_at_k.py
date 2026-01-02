@@ -127,7 +127,7 @@ def calculate_pass_at_k(num_correct: int, num_samples: int, k: int) -> float:
     # Formula: 1 - C(n-c, k) / C(n, k)
     try:
         return 1.0 - (comb(num_samples - num_correct, k) / comb(num_samples, k))
-    except:
+    except Exception:
         # Fallback se la combinazione non è calcolabile
         return 1.0 if num_correct > 0 else 0.0
 
@@ -303,8 +303,11 @@ async def main():
         }
     }
     
-    with open(output_file, "w") as f:
-        json.dump(results_dict, f, indent=2)
+    def save_json():
+        with open(output_file, "w") as f:
+            json.dump(results_dict, f, indent=2)
+
+    await asyncio.to_thread(save_json)
     
     print(f"\n✅ Results saved to: {output_file}")
 
