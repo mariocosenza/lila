@@ -11,10 +11,10 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from integrator import GRAMMO_LARK_SPEC
-from coder import grammo_compile, TOOLS as CODER_TOOLS
+from generator import grammo_compile, TOOLS as GENERATOR_TOOLS
 
 
-class ValidatorState(TypedDict, total=False):
+class DebuggerEvaluatorState(TypedDict, total=False):
     messages: Annotated[List[BaseMessage], add_messages]
 
     task: str
@@ -36,11 +36,15 @@ class ValidatorState(TypedDict, total=False):
     validation_summary: str
     test_summary: str  # New field to store the text summary of tests
 
+    global_iterations: int
+    max_global_iters: int
+    max_iters: int
+
 
 # UPDATED: Added TESTS field to the required output format
-VALIDATOR_SYSTEM = SystemMessage(
+DEBUGGER_EVALUATOR_SYSTEM = SystemMessage(
     content=(
-        "You are VALIDATOR. You are the final step in the pipeline.\n\n"
+        "You are DEBUGGER_EVALUATOR. You are the final step in the pipeline.\n\n"
         "### CONTEXT: GRAMMAR SPECIFICATION\n"
         f"{GRAMMO_LARK_SPEC}\n\n"
         "### TASK\n"
@@ -65,15 +69,15 @@ VALIDATOR_SYSTEM = SystemMessage(
 )
 
 @dataclass(frozen=True)
-class ValidatorContext:
+class DebuggerEvaluatorContext:
     llm_with_tools: object
 
 
-def _get_candidate_code(state: ValidatorState) -> str:
+def _get_candidate_code(state: DebuggerEvaluatorState) -> str:
     return (state.get("assembled_code") or state.get("code") or "").strip()
 
 
-def _parse_validator_output(text: str) -> tuple[str, str, str]:
+def _parse_debugger_evaluator_output(text: str) -> tuple[str, str, str]:
     """
     Parses the output to extract Summary, Test Report, and Code.
     Returns: (summary, test_summary, code)
@@ -114,7 +118,7 @@ def _parse_validator_output(text: str) -> tuple[str, str, str]:
     return summary, test_summary, code
 
 
-def validator_generate(ctx: ValidatorContext, state: ValidatorState) -> Dict:
+def debugger_evaluator_generate(ctx: DebuggerEvaluatorContext, state: DebuggerEvaluatorState) -> Dict:
     code = _get_candidate_code(state)
     task = (state.get("task") or state.get("original_task") or "").strip()
     test_result = state.get("test_result") or {}
@@ -132,7 +136,7 @@ def validator_generate(ctx: ValidatorContext, state: ValidatorState) -> Dict:
 
     msgs = state.get("messages", [])
     if not any(isinstance(m, SystemMessage) for m in msgs):
-        msgs = [VALIDATOR_SYSTEM, *msgs]
+        msgs = [DEBUGGER_EVALUATOR_SYSTEM, *msgs]
     else:
         msgs = msgs[:]
 
@@ -157,7 +161,7 @@ def validator_generate(ctx: ValidatorContext, state: ValidatorState) -> Dict:
     }
 
 
-def validator_route_after_generate(state: ValidatorState) -> Literal["tools", "compile", "__end__"]:
+def debugger_evaluator_route_after_generate(state: DebuggerEvaluatorState) -> Literal["tools", "compile", "__end__"]:
     if state.get("iteration_count", 0) > 10:
         return "__end__"
 
@@ -172,11 +176,11 @@ def validator_route_after_generate(state: ValidatorState) -> Literal["tools", "c
     return "compile"
 
 
-def validator_compile(state: ValidatorState) -> Dict:
+def debugger_evaluator_compile(state: DebuggerEvaluatorState) -> Dict:
     full_text = (state.get("validated_code") or "").strip()
     
     # Strip headers (SUMMARY / TESTS) before compiling
-    _, _, code_only = _parse_validator_output(full_text)
+    _, _, code_only = _parse_debugger_evaluator_output(full_text)
 
     result = grammo_compile.invoke({"code": code_only})
     attempts = int(state.get("compile_attempts", 0)) + 1
@@ -193,7 +197,7 @@ def validator_compile(state: ValidatorState) -> Dict:
         "compile_errors": compile_errors,
     }
 
-    if (not compiled) and attempts < 3:
+    if (not compiled) and attempts < 5:
         out["messages"] = [
             HumanMessage(
                 content=(
@@ -208,7 +212,7 @@ def validator_compile(state: ValidatorState) -> Dict:
     return out
 
 
-def validator_route_after_compile(state: ValidatorState) -> Literal["generate", "__end__"]:
+def debugger_evaluator_route_after_compile(state: DebuggerEvaluatorState) -> Literal["generate", "__end__"]:
     if state.get("iteration_count", 0) > 10:
         return "__end__"
 
@@ -216,17 +220,17 @@ def validator_route_after_compile(state: ValidatorState) -> Literal["generate", 
     compiled = bool(result.get("compiled", False))
     attempts = int(state.get("compile_attempts", 0))
     
-    if compiled or attempts >= 3:
+    if compiled or attempts >= 5:
         return "__end__"
         
     return "generate"
 
 
-def validator_finalize(state: ValidatorState) -> Dict:
+def debugger_evaluator_finalize(state: DebuggerEvaluatorState) -> Dict:
     full_text = (state.get("validated_code") or "").strip()
     
     # Parse all fields
-    summary, test_summary, code = _parse_validator_output(full_text)
+    summary, test_summary, code = _parse_debugger_evaluator_output(full_text)
 
     return {
         "validation_summary": summary,
@@ -236,25 +240,39 @@ def validator_finalize(state: ValidatorState) -> Dict:
     }
 
 
-def build_validator_subgraph(llm):
-    ctx = ValidatorContext(llm_with_tools=llm.bind_tools(CODER_TOOLS))
+def reset_iterations(state: DebuggerEvaluatorState) -> Dict:
+    current_iters = int(state.get("iteration_count", 0))
+    global_iters = int(state.get("global_iterations", 0))
+    new_global = global_iters + current_iters
+    
+    if new_global > int(state.get("max_global_iters", 30)):
+        # Force exit by setting iteration_count high
+        return {"iteration_count": 999, "global_iterations": new_global}
+        
+    return {"iteration_count": 0, "global_iterations": new_global}
 
-    g = StateGraph(ValidatorState)
-    g.add_node("generate", partial(validator_generate, ctx))
-    g.add_node("tools", ToolNode(CODER_TOOLS))
-    g.add_node("compile", validator_compile)
-    g.add_node("finalize", validator_finalize)
 
-    g.add_edge(START, "generate")
+def build_debugger_evaluator_subgraph(llm):
+    ctx = DebuggerEvaluatorContext(llm_with_tools=llm.bind_tools(GENERATOR_TOOLS))
+
+    g = StateGraph(DebuggerEvaluatorState)
+    g.add_node("reset", reset_iterations)
+    g.add_node("generate", partial(debugger_evaluator_generate, ctx))
+    g.add_node("tools", ToolNode(GENERATOR_TOOLS))
+    g.add_node("compile", debugger_evaluator_compile)
+    g.add_node("finalize", debugger_evaluator_finalize)
+
+    g.add_edge(START, "reset")
+    g.add_edge("reset", "generate")
     g.add_conditional_edges(
         "generate",
-        validator_route_after_generate,
+        debugger_evaluator_route_after_generate,
         {"tools": "tools", "compile": "compile", "__end__": END},
     )
     g.add_edge("tools", "generate")
     g.add_conditional_edges(
         "compile",
-        validator_route_after_compile,
+        debugger_evaluator_route_after_compile,
         {"generate": "generate", "__end__": "finalize"},
     )
     g.add_edge("finalize", END)

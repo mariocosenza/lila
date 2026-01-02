@@ -14,7 +14,7 @@ from rich.theme import Theme
 
 # LangChain / Graph imports
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from orchestrator import build_app
+from orchestrator import build_app, check_tester_service, TESTER_URL
 
 # --- 1. Fix Deprecation Warnings ---
 # Silence the specific datetime warning and Pydantic-related ones
@@ -283,7 +283,13 @@ def run_turn(
     messages: List[BaseMessage],
     trace_level: TraceLevel = "basic",
 ) -> Tuple[Dict[str, Any], List[BaseMessage]]:
-    state_in = {"messages": messages, "iterations": 0, "max_iters": 12}
+    state_in = {
+        "messages": messages, 
+        "iterations": 0, 
+        "max_iters": 8,
+        "global_iterations": 0,
+        "max_global_iters": 50
+    }
     final_state: Dict[str, Any] = {}
 
     config = {
@@ -326,6 +332,14 @@ def _parse_trace_cmd(user_in: str, current: TraceLevel) -> Tuple[bool, TraceLeve
 
 
 def main() -> None:
+    # --- Health Check ---
+    console.print("[dim]Checking Tester Service status...[/dim]")
+    if check_tester_service():
+        console.print("[bold green]✅ Tester Service is ONLINE[/bold green]")
+    else:
+        console.print(f"[bold red]❌ Tester Service is UNREACHABLE at {TESTER_URL}[/bold red]")
+        console.print("[yellow]Warning: Testing capabilities will be disabled.[/yellow]")
+
     app = build_app()
     thread_id = str(uuid.uuid4())
 

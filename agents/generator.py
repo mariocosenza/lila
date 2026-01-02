@@ -6,12 +6,12 @@ from typing import Annotated, Dict, List, Literal, TypedDict, Any
 
 from pydantic import BaseModel, Field
 from langchain.tools import tool
-from langchain_core.messages import BaseMessage, AIMessage, SystemMessage
+from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from client import grammo_compiler_mcp, grammo_lark_mcp
+from mcp_client import grammo_compiler_mcp, grammo_lark_mcp
 import asyncio, threading
 import re
 
@@ -300,7 +300,7 @@ TOOLS = [grammo_lark, grammo_compile]
 # 4. State & Prompts
 # ==========================================
 
-class CoderState(TypedDict, total=False):
+class GeneratorState(TypedDict, total=False):
     messages: Annotated[List[BaseMessage], add_messages]
     iterations: int
     max_iters: int
@@ -336,7 +336,7 @@ GRAMMO_SYSTEM = SystemMessage(
 
 
 @dataclass(frozen=True)
-class CoderContext:
+class GeneratorContext:
     llm_with_tools: object
 
 
@@ -346,7 +346,7 @@ def ensure_system_message(messages: List[BaseMessage]) -> List[BaseMessage]:
     return [GRAMMO_SYSTEM, *messages]
 
 
-def coder_generate(ctx: CoderContext, state: CoderState) -> Dict:
+def generator_generate(ctx: GeneratorContext, state: GeneratorState) -> Dict:
     messages = ensure_system_message(state.get("messages", []))
     ai: AIMessage = ctx.llm_with_tools.invoke(messages)
 
@@ -354,6 +354,10 @@ def coder_generate(ctx: CoderContext, state: CoderState) -> Dict:
     max_iters = int(state.get("max_iters", 5))
 
     code = _sanitize_grammo_source(ai.content or "")
+    
+    # If code is empty and no tool calls, try to recover by asking explicitly next time
+    # But we can't easily inject a message here without returning it.
+    # The next step (compile) will catch the empty code and inject the error message.
 
     return {
         "messages": [ai],
@@ -363,9 +367,9 @@ def coder_generate(ctx: CoderContext, state: CoderState) -> Dict:
     }
 
 
-def coder_route_after_generate(state: CoderState) -> Literal["tools", "compile", "__end__"]:
+def generator_route_after_generate(state: GeneratorState) -> Literal["tools", "compile", "__end__"]:
     iters = int(state.get("iterations", 0))
-    max_iters = int(state.get("max_iters", 3))
+    max_iters = int(state.get("max_iters", 5))
     if iters >= max_iters:
         return "__end__"
 
@@ -380,8 +384,22 @@ def coder_route_after_generate(state: CoderState) -> Literal["tools", "compile",
     return "compile"
 
 
-def coder_compile(state: CoderState) -> Dict:
+def generator_compile(state: GeneratorState) -> Dict:
     code = _sanitize_grammo_source(state.get("code") or "")
+
+    # Safety check: If code is empty, don't even try to compile, just fail.
+    if not code or len(code.strip()) < 10:
+        attempts = int(state.get("compile_attempts", 0)) + 1
+        return {
+            "compile_attempts": attempts,
+            "compile_result": {"compiled": False, "errors": "No code generated or code too short."},
+            "compile_errors": list(state.get("compile_errors", [])) + ["No code generated."],
+            "code": code,
+            "messages": [
+                HumanMessage(content="Error: No code found. Please output the full Grammo code.")
+            ]
+        }
+
     result = grammo_compile.invoke({"code": code})
 
     attempts = int(state.get("compile_attempts", 0)) + 1
@@ -400,9 +418,12 @@ def coder_compile(state: CoderState) -> Dict:
         "code": code
     }
 
-    if (not compiled) and attempts < 3:
+    # Use max_iters from state or default to 5
+    max_retries = int(state.get("max_iters", 5))
+    
+    if (not compiled) and attempts < max_retries:
         out["messages"] = [
-            SystemMessage(
+            HumanMessage(
                 content=(
                     "Compilation failed. Fix the code and try again.\n"
                     f"Errors:\n{errors or '(no details)'}"
@@ -413,36 +434,52 @@ def coder_compile(state: CoderState) -> Dict:
     return out
 
 
-def coder_route_after_compile(state: CoderState) -> Literal["generate", "__end__"]:
+def generator_route_after_compile(state: GeneratorState) -> Literal["generate", "__end__"]:
     result = state.get("compile_result") or {}
     compiled = bool(result.get("compiled", False))
     attempts = int(state.get("compile_attempts", 0))
+    max_retries = int(state.get("max_iters", 5))
 
     if compiled:
         return "__end__"
-    if attempts >= 3:
+    if attempts >= max_retries:
         return "__end__"
     return "generate"
 
 
-def build_coder_subgraph(llm):
-    ctx = CoderContext(llm_with_tools=llm.bind_tools(TOOLS))
+def reset_iterations(state: GeneratorState) -> Dict:
+    current_iters = int(state.get("iterations", 0))
+    global_iters = int(state.get("global_iterations", 0))
+    new_global = global_iters + current_iters
+    
+    if new_global > int(state.get("max_global_iters", 30)):
+        # Stop execution if global limit reached
+        # We can't easily stop the whole graph from here, but we can set max_iters to 0 to force exit
+        return {"iterations": 0, "global_iterations": new_global, "max_iters": 0}
+        
+    return {"iterations": 0, "global_iterations": new_global}
 
-    g = StateGraph(CoderState)
-    g.add_node("generate", partial(coder_generate, ctx))
+
+def build_generator_subgraph(llm):
+    ctx = GeneratorContext(llm_with_tools=llm.bind_tools(TOOLS))
+
+    g = StateGraph(GeneratorState)
+    g.add_node("reset", reset_iterations)
+    g.add_node("generate", partial(generator_generate, ctx))
     g.add_node("tools", ToolNode(TOOLS))
-    g.add_node("compile", coder_compile)
+    g.add_node("compile", generator_compile)
 
-    g.add_edge(START, "generate")
+    g.add_edge(START, "reset")
+    g.add_edge("reset", "generate")
     g.add_conditional_edges(
         "generate",
-        coder_route_after_generate,
+        generator_route_after_generate,
         {"tools": "tools", "compile": "compile", "__end__": END},
     )
     g.add_edge("tools", "generate")
     g.add_conditional_edges(
         "compile",
-        coder_route_after_compile,
+        generator_route_after_compile,
         {"generate": "generate", "__end__": END},
     )
 

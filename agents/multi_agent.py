@@ -29,7 +29,7 @@ logger.setLevel(logging.DEBUG)
 
 class AgentState(TypedDict, total=False):
     """
-    Shared state for all agents (Orchestrator, Coder, Planner, Tester, Validator).
+    Shared state for all agents (Orchestrator, Generator, Planner, Tester, DebuggerEvaluator).
     """
     # Message History
     messages: Annotated[List[BaseMessage], add_messages]
@@ -43,9 +43,10 @@ class AgentState(TypedDict, total=False):
     plan: List[str]
     plan_step: int
     awaiting_approval: bool
+    run_tests: bool  # Flag to force testing
     
     # --- Code Artifacts ---
-    code: str           # Direct output from Coder
+    code: str           # Direct output from Generator
     assembled_code: str # Output from Integrator
     
     # --- Compilation State ---
@@ -65,6 +66,8 @@ class AgentState(TypedDict, total=False):
     # --- Loop Control ---
     iterations: int
     max_iters: int
+    global_iterations: int
+    max_global_iters: int
 
 
 def _is_retryable_error(exception: Exception) -> bool:
@@ -364,10 +367,15 @@ class _GeminiSafeWrapper:
         return getattr(self._llm, name)
 
 
-def build_llm(*, use_gemini: bool = True):
+def build_llm(*, use_gemini: bool = None):
     """
     Build and return the chat model.
     """
+    # If not explicitly set, check environment variable
+    if use_gemini is None:
+        use_local = os.getenv("USE_LOCAL_LLM", "false").lower() == "true"
+        use_gemini = not use_local
+
     if use_gemini:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI

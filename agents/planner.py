@@ -169,7 +169,7 @@ def _create_revise_plan_node(llm):
 
 # --- Planner Node Helper Functions ---
 
-def _add_planner_nodes(g: StateGraph, make_plan, revise_plan_node, coder_subgraph, ask_approval, handle_approval, set_next_subtask, advance) -> None:
+def _add_planner_nodes(g: StateGraph, make_plan, revise_plan_node, generator_subgraph, ask_approval, handle_approval, set_next_subtask, advance) -> None:
     """Add all nodes to the planner graph."""
     g.add_node("entry", lambda state: {})
     g.add_node("make_plan", make_plan)
@@ -179,10 +179,10 @@ def _add_planner_nodes(g: StateGraph, make_plan, revise_plan_node, coder_subgrap
     g.add_node("set_next_subtask", set_next_subtask)
     g.add_node("advance", advance)
     
-    # Coder Integration
-    def coder_no_stream(state: AgentState, config: Optional[RunnableConfig] = None) -> Dict:
-        return coder_subgraph.invoke(state, config=_config_with_stream(config, False))
-    g.add_node("coder_no_stream", coder_no_stream)
+    # Generator Integration
+    def generator_no_stream(state: AgentState, config: Optional[RunnableConfig] = None) -> Dict:
+        return generator_subgraph.invoke(state, config=_config_with_stream(config, False))
+    g.add_node("generator_no_stream", generator_no_stream)
 
 
 def _add_planner_edges(g: StateGraph) -> None:
@@ -217,15 +217,15 @@ def _add_planner_edges(g: StateGraph) -> None:
     })
 
     g.add_edge("revise_plan", "ask_approval")
-    g.add_edge("set_next_subtask", "coder_no_stream")
-    g.add_edge("coder_no_stream", "advance")
+    g.add_edge("set_next_subtask", "generator_no_stream")
+    g.add_edge("generator_no_stream", "advance")
     g.add_conditional_edges("advance", should_continue, {
         "loop": "set_next_subtask",
         "end": END,
     })
 
 
-def build_planner_subgraph(llm, coder_subgraph):
+def build_planner_subgraph(llm, generator_subgraph):
     g = StateGraph(AgentState)
 
     # --- Node Functions (using factories) ---
@@ -236,9 +236,9 @@ def build_planner_subgraph(llm, coder_subgraph):
         plan = state.get("plan") or []
         lines = "\n".join(f"{i+1}. {t}" for i, t in enumerate(plan))
         msg = (
-            "Ecco il piano proposto:\n"
+            "Here is the proposed plan:\n"
             f"{lines}\n\n"
-            "Va bene? Rispondi con **sì** per procedere, oppure **no** e dimmi cosa cambiare."
+            "Is this okay? Reply with **yes** to proceed, or **no** and tell me what to change."
         )
         return {"awaiting_approval": True, "messages": [AIMessage(content=msg)]}
 
@@ -248,18 +248,18 @@ def build_planner_subgraph(llm, coder_subgraph):
         if _is_yes(answer):
             return {
                 "awaiting_approval": False,
-                "messages": [AIMessage(content="Ottimo. Inizio l'implementazione step-by-step.")],
+                "messages": [AIMessage(content="Great. Starting step-by-step implementation.")],
             }
 
         if _is_no(answer):
             return {
                 "awaiting_approval": False,
-                "messages": [AIMessage(content="Ricevuto. Modifico il piano in base al tuo feedback.")],
+                "messages": [AIMessage(content="Received. Modifying the plan based on your feedback.")],
             }
 
         return {
             "awaiting_approval": True,
-            "messages": [AIMessage(content="Per favore rispondi con 'sì' per confermare o 'no' per modificare.")],
+            "messages": [AIMessage(content="Please reply with 'yes' to confirm or 'no' to modify.")],
         }
 
     # --- Execution Logic ---
@@ -274,7 +274,7 @@ def build_planner_subgraph(llm, coder_subgraph):
         return {"plan_step": int(state.get("plan_step") or 0) + 1}
 
     # --- Graph Construction ---
-    _add_planner_nodes(g, make_plan, revise_plan_node, coder_subgraph, ask_approval, handle_approval, set_next_subtask, advance)
+    _add_planner_nodes(g, make_plan, revise_plan_node, generator_subgraph, ask_approval, handle_approval, set_next_subtask, advance)
     _add_planner_edges(g)
 
     return g.compile()

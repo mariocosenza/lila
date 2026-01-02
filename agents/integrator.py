@@ -9,7 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from coder import grammo_compile, TOOLS as CODER_TOOLS
+from generator import grammo_compile, TOOLS as GENERATOR_TOOLS
 
 
 class IntegratorState(TypedDict, total=False):
@@ -323,15 +323,28 @@ def integrator_route_after_compile(state: IntegratorState) -> Literal["generate"
     return "generate"
 
 
+def reset_iterations(state: IntegratorState) -> Dict:
+    current_iters = int(state.get("iterations", 0))
+    global_iters = int(state.get("global_iterations", 0))
+    new_global = global_iters + current_iters
+    
+    if new_global > int(state.get("max_global_iters", 30)):
+        return {"iterations": 0, "global_iterations": new_global, "max_iters": 0}
+        
+    return {"iterations": 0, "global_iterations": new_global}
+
+
 def build_integrator_subgraph(llm):
-    ctx = IntegratorContext(llm_with_tools=llm.bind_tools(CODER_TOOLS))
+    ctx = IntegratorContext(llm_with_tools=llm.bind_tools(GENERATOR_TOOLS))
 
     g = StateGraph(IntegratorState)
+    g.add_node("reset", reset_iterations)
     g.add_node("generate", partial(integrator_generate, ctx))
-    g.add_node("tools", ToolNode(CODER_TOOLS))
+    g.add_node("tools", ToolNode(GENERATOR_TOOLS))
     g.add_node("compile", integrator_compile)
 
-    g.add_edge(START, "generate")
+    g.add_edge(START, "reset")
+    g.add_edge("reset", "generate")
     g.add_conditional_edges(
         "generate",
         integrator_route_after_generate,
