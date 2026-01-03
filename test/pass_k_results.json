@@ -1,0 +1,33 @@
+{
+  "tasks": [
+    {
+      "name": "calculator",
+      "samples_generated": 20,
+      "samples_compiled": 0,
+      "pass_at_5": 0.0,
+      "pass_at_10": 0.0,
+      "pass_at_20": 0.0
+    },
+    {
+      "name": "factorial",
+      "samples_generated": 20,
+      "samples_compiled": 0,
+      "pass_at_5": 0.0,
+      "pass_at_10": 0.0,
+      "pass_at_20": 0.0
+    },
+    {
+      "name": "fibonacci",
+      "samples_generated": 20,
+      "samples_compiled": 14,
+      "pass_at_5": 0.9996130030959752,
+      "pass_at_10": 1.0,
+      "pass_at_20": 1.0
+    }
+  ],
+  "averages": {
+    "pass_at_5": 0.3332043343653251,
+    "pass_at_10": 0.3333333333333333,
+    "pass_at_20": 0.3333333333333333
+  }
+}
