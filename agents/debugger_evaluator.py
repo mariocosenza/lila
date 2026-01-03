@@ -12,6 +12,11 @@ from langgraph.prebuilt import ToolNode
 
 from integrator import GRAMMO_LARK_SPEC
 from generator import grammo_compile, TOOLS as GENERATOR_TOOLS
+from prompts.debugger_evaluator_prompts import (
+    DEBUGGER_EVALUATOR_SYSTEM,
+    build_debugger_evaluator_user_payload,
+    build_debugger_evaluator_compile_failure_message
+)
 
 
 class DebuggerEvaluatorState(TypedDict, total=False):
@@ -40,33 +45,6 @@ class DebuggerEvaluatorState(TypedDict, total=False):
     max_global_iters: int
     max_iters: int
 
-
-# UPDATED: Added TESTS field to the required output format
-DEBUGGER_EVALUATOR_SYSTEM = SystemMessage(
-    content=(
-        "You are DEBUGGER_EVALUATOR. You are the final step in the pipeline.\n\n"
-        "### CONTEXT: GRAMMAR SPECIFICATION\n"
-        f"{GRAMMO_LARK_SPEC}\n\n"
-        "### TASK\n"
-        "Analyze the Grammo code and the provided Test Results.\n"
-        "1. Fix small syntax errors if present.\n"
-        "2. Summarize the test outcome (e.g. 'Passed 2/2' or 'Failed: Output mismatch').\n"
-        "3. Produce the final report.\n\n"
-        "### 1. CHECKLIST\n"
-        "- **I/O Syntax:** Verify strict usage of `>> \"Prompt\" # (var);` and `<< \"Msg\" # (var);`.\n"
-        "- **Structure:** Ensure exactly ONE `func main` exists.\n"
-        "- **Variables:** Ensure explicit `var int: x;` or constant `var x = 10;` style.\n\n"
-        "### 2. STRICT OUTPUT FORMAT\n"
-        "You MUST format your output exactly as follows:\n"
-        "SUMMARY: [Concise summary of what the program does]\n"
-        "TESTS: [Summary of test results, e.g. 'Passed', 'Failed', 'Not Run']\n"
-        "[...Raw Grammo Code Here...]\n\n"
-        "⛔ **NEGATIVE CONSTRAINTS** ⛔\n"
-        "- **DO NOT** repeat the Grammar Specification.\n"
-        "- **DO NOT** use Markdown fences (```) if possible, but if you do, ensure code is inside.\n"
-        "- **DO NOT** include any conversational text after the code."
-    )
-)
 
 @dataclass(frozen=True)
 class DebuggerEvaluatorContext:
@@ -125,14 +103,7 @@ def debugger_evaluator_generate(ctx: DebuggerEvaluatorContext, state: DebuggerEv
     
     current_iter = state.get("iteration_count", 0) + 1
 
-    user_payload = (
-        "Validate and minimally fix this Grammo program.\n"
-        "Do not change logic unless fixing a bug.\n\n"
-        f"TASK:\n{task}\n\n"
-        f"TEST_RESULTS (from Tester):\n{test_result}\n\n"
-        "GRAMMO CODE:\n"
-        f"{code}"
-    )
+    user_payload = build_debugger_evaluator_user_payload(task, test_result, code)
 
     msgs = state.get("messages", [])
     if not any(isinstance(m, SystemMessage) for m in msgs):
@@ -200,12 +171,7 @@ def debugger_evaluator_compile(state: DebuggerEvaluatorState) -> Dict:
     if (not compiled) and attempts < 5:
         out["messages"] = [
             HumanMessage(
-                content=(
-                    "Compilation failed. Apply the smallest possible fix.\n"
-                    f"Errors:\n{errors or '(no details)'}\n\n"
-                    "Return strict format:\n"
-                    "SUMMARY: ...\nTESTS: ...\n[Code]"
-                )
+                content=build_debugger_evaluator_compile_failure_message(errors)
             )
         ]
 

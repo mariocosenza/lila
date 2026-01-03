@@ -18,6 +18,7 @@ from langgraph.prebuilt import ToolNode
 
 from mcp_client import grammo_test_mcp
 from integrator import GRAMMO_LARK_SPEC
+from prompts.tester_prompts import TESTER_SYSTEM_CONTENT, build_initial_test_prompt, build_debug_test_prompt
 
 
 logging.basicConfig(
@@ -96,23 +97,6 @@ class TesterState(TypedDict, total=False):
     test_attempts: int
     max_test_attempts: int
 
-TESTER_SYSTEM_CONTENT = (
-    "You are TESTER, an expert debugger for the Grammo language.\n"
-    "Goal: Create robust tests, run them, and ensure the code passes.\n\n"
-    "### WORKFLOW\n"
-    "1. **Initial Run:** Generate comprehensive test cases and run them against the input code.\n"
-    "2. **Debug Loop:** If tests fail, analyze the `stderr` and `stdout`.\n"
-    "   - **Is the Code broken?** -> Patch the Grammo code.\n"
-    "   - **Are the Tests broken?** (e.g. syntax errors, wrong logic) -> Refine the tests.\n"
-    "   - **Both?** -> Fix both.\n"
-    "3. **Call Tool:** You MUST call `run_grammo_tests` with the (potentially updated) `code` and `tests` strings.\n\n"
-    "### RULES\n"
-    "- **ALWAYS** provide the full code and full tests in the tool arguments.\n"
-    "- **Grammo Spec:** Follow the grammar below exactly.\n"
-    "- **I/O Format:** Inputs in tests should mimic `>> \"Prompt\" # (var);` behavior.\n\n"
-    "LARK SPECIFICATION:\n"
-    f"{GRAMMO_LARK_SPEC}"
-)
 
 @dataclass(frozen=True)
 class TesterContext:
@@ -138,28 +122,6 @@ def _init_original_code(state: TesterState) -> Dict:
         "test_attempts": 0
     }
 
-def _build_initial_test_prompt(code: str) -> str:
-    return (
-        "GRAMMO CODE:\n"
-        f"{code}\n\n"
-        "Generate comprehensive tests and call `run_grammo_tests`."
-    )
-
-def _build_debug_test_prompt(last_result: Dict[str, Any], current_tests: str, code: str) -> str:
-    return (
-        "⚠️ PREVIOUS TESTS FAILED.\n"
-        "Review the output below. Determine if the error is in the **Code** (logic bug) or the **Test** (syntax/format error).\n\n"
-        f"RESULT:\n{json.dumps(last_result, indent=2)}\n\n"
-        "INSTRUCTIONS:\n"
-        "1. If `stderr` shows parsing errors in the test file -> **FIX THE TESTS**.\n"
-        "2. If `stdout` shows assertion failures -> **FIX THE CODE** (or adjust tests if expectations were wrong).\n"
-        "3. Call `run_grammo_tests` with the corrected full code and full tests.\n\n"
-        "CURRENT CODE:\n"
-        f"{code}\n\n"
-        "CURRENT TESTS:\n"
-        f"{current_tests}"
-    )
-
 def tester_generate(ctx: TesterContext, state: TesterState) -> Dict:
     """Generates tests, or patches code and re-tests."""
     attempts = int(state.get("test_attempts", 0))
@@ -175,10 +137,10 @@ def tester_generate(ctx: TesterContext, state: TesterState) -> Dict:
         msgs = [SystemMessage(content=TESTER_SYSTEM_CONTENT), *msgs]
 
     if attempts == 0:
-        prompt_text = _build_initial_test_prompt(code)
+        prompt_text = build_initial_test_prompt(code)
     else:
         logger.info("   ↳ Debugging failure from previous run.")
-        prompt_text = _build_debug_test_prompt(last_result, current_tests, code)
+        prompt_text = build_debug_test_prompt(last_result, current_tests, code)
 
     # Invoke Ollama
     response = ctx.llm_with_tools.invoke([*msgs, HumanMessage(content=prompt_text)])

@@ -16,7 +16,7 @@ from rich.theme import Theme
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from orchestrator import build_app, check_tester_service, TESTER_URL
 
-# --- 1. Fix Deprecation Warnings ---
+# --- 1. Deprecation Warnings ---
 # Silence the specific datetime warning and Pydantic-related ones
 warnings.filterwarnings(
     "ignore", 
@@ -54,7 +54,6 @@ TRACE_KEYS = {
 
 
 def _ts() -> str:
-    # UPDATED: Use timezone.utc to fix the AttributeError and avoid warnings
     return datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3]
 
 

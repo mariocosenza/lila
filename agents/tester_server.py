@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage
 
 # Import the new Ollama-based graph builder
 from tester import build_tester_graph
+from prompts.tester_prompts import build_tester_server_invoke_prompt
 
 # --- Data Models ---
 class A2ARequest(BaseModel):
@@ -61,11 +62,7 @@ def create_app() -> FastAPI:
 
         # Construct the initial message for the Tester Agent
         msg = HumanMessage(
-            content=(
-                (req.task.strip() + "\n\n") if req.task.strip() else ""
-                "Generate tests for the given Grammo program and run them.\n"
-                "Return a short summary after the tool call."
-            )
+            content=build_tester_server_invoke_prompt(req.task)
         )
 
         try:

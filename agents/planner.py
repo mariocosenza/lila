@@ -9,6 +9,12 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, START, END
 
 from multi_agent import AgentState
+from prompts.planner_prompts import (
+    MAKE_PLAN_SYSTEM_PROMPT,
+    REVISE_PLAN_SYSTEM_MESSAGE,
+    build_revise_plan_prompt,
+    build_ask_approval_message
+)
 
 # --- Helper Functions ---
 
@@ -96,29 +102,8 @@ def _create_make_plan_node(llm):
         original = (state.get("task") or "").strip()
 
         # Strong System Prompt with Examples (Few-Shot)
-        system_prompt = (
-            "You are the **Technical Lead**. Your job is to break down a user request into small, implementation-ready coding steps.\n\n"
-            "### RULES:\n"
-            "1. **DECOMPOSE**: Do not just repeat the task. Split it into 3-6 logical phases.\n"
-            "2. **FORMAT**: Return ONLY a raw JSON list of strings.\n"
-            "3. **STYLE**: Steps must be instructions for a developer (e.g., 'Create struct', 'Implement logic').\n\n"
-            "### EXAMPLES:\n"
-            "User: 'Create a Snake game'\n"
-            "You: [\n"
-            "  \"Define the Grid and Snake data structures\",\n"
-            "  \"Implement the movement logic and input handling\",\n"
-            "  \"Implement collision detection and score tracking\",\n"
-            "  \"Create the main game loop and rendering\"\n"
-            "]\n\n"
-            "User: 'Write a factorial function'\n"
-            "You: [\n"
-            "  \"Define the factorial function with integer input\",\n"
-            "  \"Handle edge cases (0 and negative numbers)\",\n"
-            "  \"Implement recursive or iterative calculation\"\n"
-            "]"
-        )
 
-        resp = llm.invoke([SystemMessage(content=system_prompt), SystemMessage(content=original)])
+        resp = llm.invoke([SystemMessage(content=MAKE_PLAN_SYSTEM_PROMPT), SystemMessage(content=original)])
         plan = _parse_plan_json(resp.content)
         
         # Safety Check: If plan is still empty or identical to input (Lazy Model), force split
@@ -146,16 +131,9 @@ def _create_revise_plan_node(llm):
         original = (state.get("original_task") or "").strip()
         feedback = (state.get("task") or "").strip()
 
-        sys = SystemMessage(
-            content=(
-                "You are the Technical Lead. The user rejected the previous plan.\n"
-                "Create a NEW plan considering the user's feedback.\n"
-                "Return ONLY a JSON list of strings."
-            )
-        )
-        prompt = f"Original Request: {original}\nFeedback: {feedback}"
+        prompt = build_revise_plan_prompt(original, feedback)
         
-        resp = llm.invoke([sys, SystemMessage(content=prompt)])
+        resp = llm.invoke([REVISE_PLAN_SYSTEM_MESSAGE, SystemMessage(content=prompt)])
         plan = _parse_plan_json(resp.content)
         
         if not plan:
@@ -234,12 +212,7 @@ def build_planner_subgraph(llm, generator_subgraph):
 
     def ask_approval(state: AgentState) -> Dict:
         plan = state.get("plan") or []
-        lines = "\n".join(f"{i+1}. {t}" for i, t in enumerate(plan))
-        msg = (
-            "Here is the proposed plan:\n"
-            f"{lines}\n\n"
-            "Is this okay? Reply with **yes** to proceed, or **no** and tell me what to change."
-        )
+        msg = build_ask_approval_message(plan)
         return {"awaiting_approval": True, "messages": [AIMessage(content=msg)]}
 
     def handle_approval(state: AgentState) -> Dict:

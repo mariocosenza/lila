@@ -19,6 +19,7 @@ from integrator import build_integrator_subgraph
 from multi_agent import AgentState, build_llm
 from planner import build_planner_subgraph
 from debugger_evaluator import build_debugger_evaluator_subgraph
+from prompts.orchestrator_prompts import ROUTER_INSTRUCTIONS
 
 # --- Configuration ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -72,26 +73,11 @@ def router_node(llm, state: AgentState) -> Dict:
     user_explicitly_wants_tests = any(w in lower_task for w in explicit_test_keywords)
 
     # 4. Construct System Prompt
-    router_instructions = (
-        "You are the ROUTER for a Grammo coding assistant.\n"
-        "Your job is to analyze the user request and output a JSON decision.\n\n"
-        "### 1. ROUTE SELECTION\n"
-        "- 'generator': For single-file tasks, specific functions, bug fixes, or refactoring.\n"
-        "- 'planner': For multi-file architectures, complex systems, or vague requirements.\n"
-        "- 'other': If the request is not about coding.\n\n"
-        "### 2. TESTING DECISION ('run_tests')\n"
-        "Determine if a separate TEST SUITE execution is strictly necessary.\n"
-        "- **FALSE**: If the task is simple logic, math (e.g., '2+2', 'factorial'), standard algorithms, basic string manipulation, or pure documentation.\n"
-        "  -> EVEN IF IT IS LOGICAL, if it is simple/standard, set FALSE unless the user asked to verify it.\n"
-        "- **TRUE**: Only for complex custom business logic, unknown edge cases, or risky algorithms.\n\n"
-        "**IMPORTANT:** If the user explicitly asks to 'test', 'check' or 'verify', 'run_tests' MUST be true.\n\n"
-        "Return ONLY valid JSON: {\"route\": \"...\", \"run_tests\": true|false}"
-    )
 
     try:
         # Invoke LLM using HumanMessage for the task
         resp = llm.invoke([
-            SystemMessage(content=router_instructions), 
+            SystemMessage(content=ROUTER_INSTRUCTIONS), 
             HumanMessage(content=task)
         ])
         
