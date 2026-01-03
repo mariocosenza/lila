@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Annotated, Dict, List, Literal, TypedDict, Any
+from typing import Annotated, Literal, TypedDict, Any
 
 from pydantic import BaseModel, Field
 from langchain.tools import tool
@@ -70,16 +70,17 @@ class GrammoCode(BaseModel):
         )
     )
 
+def _target_sync(coro, res: dict[str, Any]):
+    res['value'] = asyncio.run(coro)
+
 def _run_sync(coro):
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
     else:
-        res = {}
-        def _target():
-            res['value'] = asyncio.run(coro)
-        t = threading.Thread(target=_target)
+        res: dict[str, Any] = {}
+        t = threading.Thread(target=_target_sync, args=(coro, res))
         t.start()
         t.join()
         return res.get('value')
@@ -97,28 +98,28 @@ def grammo_lark(code: str) -> str:
     return f"Lark syntax check result: {result}"
 
 
+def _target_sync_compile(coro, res: dict[str, Any]):
+    try:
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        res["value"] = new_loop.run_until_complete(coro)
+    except Exception as e:
+        res["error"] = e
+    finally:
+        try:
+            new_loop.close()
+        except Exception:
+            pass
+
 def _run_sync_compile(coro):
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
     else:
-        res: Dict[str, Any] = {}
+        res: dict[str, Any] = {}
 
-        def _target():
-            try:
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                res["value"] = new_loop.run_until_complete(coro)
-            except Exception as e:
-                res["error"] = e
-            finally:
-                try:
-                    new_loop.close()
-                except Exception:
-                    pass
-
-        t = threading.Thread(target=_target, daemon=True)
+        t = threading.Thread(target=_target_sync_compile, args=(coro, res), daemon=True)
         t.start()
         t.join()
 
@@ -128,7 +129,7 @@ def _run_sync_compile(coro):
 
 
 @tool("grammo_compile", args_schema=GrammoCode)
-def grammo_compile(code: str) -> Dict[str, str]:
+def grammo_compile(code: str) -> dict[str, str]:
     """
     Compile a source string into Grammo format.
     """
@@ -155,14 +156,14 @@ TOOLS = [grammo_lark, grammo_compile]
 # ==========================================
 
 class GeneratorState(TypedDict, total=False):
-    messages: Annotated[List[BaseMessage], add_messages]
+    messages: Annotated[list[BaseMessage], add_messages]
     iterations: int
     max_iters: int
 
     code: str
     compile_attempts: int
-    compile_result: Dict[str, Any]
-    compile_errors: List[str]
+    compile_result: dict[str, Any]
+    compile_errors: list[str]
 
 
 @dataclass(frozen=True)
@@ -170,13 +171,13 @@ class GeneratorContext:
     llm_with_tools: object
 
 
-def ensure_system_message(messages: List[BaseMessage]) -> List[BaseMessage]:
+def ensure_system_message(messages: list[BaseMessage]) -> list[BaseMessage]:
     if messages and isinstance(messages[0], SystemMessage):
         return messages
     return [GRAMMO_SYSTEM, *messages]
 
 
-def generator_generate(ctx: GeneratorContext, state: GeneratorState) -> Dict:
+def generator_generate(ctx: GeneratorContext, state: GeneratorState) -> dict:
     messages = ensure_system_message(state.get("messages", []))
     ai: AIMessage = ctx.llm_with_tools.invoke(messages)
 
@@ -214,7 +215,7 @@ def generator_route_after_generate(state: GeneratorState) -> Literal["tools", "c
     return "compile"
 
 
-def generator_compile(state: GeneratorState) -> Dict:
+def generator_compile(state: GeneratorState) -> dict:
     code = _sanitize_grammo_source(state.get("code") or "")
 
     # Safety check: If code is empty, don't even try to compile, just fail.
@@ -240,7 +241,7 @@ def generator_compile(state: GeneratorState) -> Dict:
     if (not compiled) and errors:
         compile_errors.append(errors)
 
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "compile_attempts": attempts,
         "compile_result": result,
         "compile_errors": compile_errors,
@@ -273,7 +274,7 @@ def generator_route_after_compile(state: GeneratorState) -> Literal["generate", 
     return "generate"
 
 
-def reset_iterations(state: GeneratorState) -> Dict:
+def reset_iterations(state: GeneratorState) -> dict:
     current_iters = int(state.get("iterations", 0))
     global_iters = int(state.get("global_iterations", 0))
     new_global = global_iters + current_iters

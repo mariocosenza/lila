@@ -6,7 +6,7 @@ import logging
 import requests
 import re
 from functools import partial
-from typing import Dict, Any, Literal
+from typing import Any, Literal
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
@@ -53,7 +53,7 @@ def check_tester_service() -> bool:
 # 2. CORE NODES
 # ==========================================
 
-def router_node(llm, state: AgentState) -> Dict:
+def router_node(llm, state: AgentState) -> dict:
     """
     Decides the execution path (Generator vs Planner) and whether to run tests.
     """
@@ -110,7 +110,7 @@ def router_node(llm, state: AgentState) -> Dict:
         "run_tests": final_run_tests
     }
 
-def tester_node(state: AgentState) -> Dict:
+def tester_node(state: AgentState) -> dict:
     """
     Synchronous call to the Tester FastAPI server.
     Blocking call with NO TIMEOUT to allow local LLMs to finish.

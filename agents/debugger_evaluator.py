@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Annotated, Any, Dict, List, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 import re
 
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
@@ -20,7 +20,7 @@ from prompts.debugger_evaluator_prompts import (
 
 
 class DebuggerEvaluatorState(TypedDict, total=False):
-    messages: Annotated[List[BaseMessage], add_messages]
+    messages: Annotated[list[BaseMessage], add_messages]
 
     task: str
     original_task: str
@@ -29,17 +29,18 @@ class DebuggerEvaluatorState(TypedDict, total=False):
     assembled_code: str
 
     tests: str
-    test_result: Dict[str, Any]
+    test_result: dict[str, Any]
 
     iteration_count: int
 
     compile_attempts: int
-    compile_result: Dict[str, Any]
-    compile_errors: List[str]
+    compile_result: dict[str, Any]
+    compile_errors: list[str]
 
     validated_code: str
     validation_summary: str
     test_summary: str  # New field to store the text summary of tests
+    error_summary: str # New field to store the text summary of compilation errors
 
     global_iterations: int
     max_global_iters: int
@@ -55,13 +56,14 @@ def _get_candidate_code(state: DebuggerEvaluatorState) -> str:
     return (state.get("assembled_code") or state.get("code") or "").strip()
 
 
-def _parse_debugger_evaluator_output(text: str) -> tuple[str, str, str]:
+def _parse_debugger_evaluator_output(text: str) -> tuple[str, str, str, str]:
     """
-    Parses the output to extract Summary, Test Report, and Code.
-    Returns: (summary, test_summary, code)
+    Parses the output to extract Summary, Test Report, Error Report, and Code.
+    Returns: (summary, test_summary, error_summary, code)
     """
     summary = ""
     test_summary = ""
+    error_summary = ""
     
     lines = text.splitlines()
     clean_lines = []
@@ -73,6 +75,8 @@ def _parse_debugger_evaluator_output(text: str) -> tuple[str, str, str]:
             summary = stripped[len("SUMMARY:") :].strip()
         elif stripped.startswith("TESTS:"):
             test_summary = stripped[len("TESTS:") :].strip()
+        elif stripped.startswith("ERRORS:"):
+            error_summary = stripped[len("ERRORS:") :].strip()
         elif stripped.startswith(("GRAMMO SPECIFICATION:", "// ===", "start: program")):
             # Stop if we hit hallucinated grammar spec
             break
@@ -87,16 +91,16 @@ def _parse_debugger_evaluator_output(text: str) -> tuple[str, str, str]:
         match = re.search(r"```(?:\w+)?\s*\n(.*?)\n```", text, re.DOTALL)
         if match:
             code = match.group(1).strip()
-            return summary, test_summary, code
+            return summary, test_summary, error_summary, code
 
     # 3. Fallback: Return whatever is left after stripping headers
     # Strip leading empty lines
     code = text.strip()
     
-    return summary, test_summary, code
+    return summary, test_summary, error_summary, code
 
 
-def debugger_evaluator_generate(ctx: DebuggerEvaluatorContext, state: DebuggerEvaluatorState) -> Dict:
+def debugger_evaluator_generate(ctx: DebuggerEvaluatorContext, state: DebuggerEvaluatorState) -> dict:
     code = _get_candidate_code(state)
     task = (state.get("task") or state.get("original_task") or "").strip()
     test_result = state.get("test_result") or {}
@@ -147,11 +151,11 @@ def debugger_evaluator_route_after_generate(state: DebuggerEvaluatorState) -> Li
     return "compile"
 
 
-def debugger_evaluator_compile(state: DebuggerEvaluatorState) -> Dict:
+def debugger_evaluator_compile(state: DebuggerEvaluatorState) -> dict:
     full_text = (state.get("validated_code") or "").strip()
     
-    # Strip headers (SUMMARY / TESTS) before compiling
-    _, _, code_only = _parse_debugger_evaluator_output(full_text)
+    # Strip headers (SUMMARY / TESTS / ERRORS) before compiling
+    _, _, _, code_only = _parse_debugger_evaluator_output(full_text)
 
     result = grammo_compile.invoke({"code": code_only})
     attempts = int(state.get("compile_attempts", 0)) + 1
@@ -162,7 +166,7 @@ def debugger_evaluator_compile(state: DebuggerEvaluatorState) -> Dict:
     if (not compiled) and errors:
         compile_errors.append(errors)
 
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "compile_attempts": attempts,
         "compile_result": result,
         "compile_errors": compile_errors,
@@ -192,21 +196,22 @@ def debugger_evaluator_route_after_compile(state: DebuggerEvaluatorState) -> Lit
     return "generate"
 
 
-def debugger_evaluator_finalize(state: DebuggerEvaluatorState) -> Dict:
+def debugger_evaluator_finalize(state: DebuggerEvaluatorState) -> dict:
     full_text = (state.get("validated_code") or "").strip()
     
     # Parse all fields
-    summary, test_summary, code = _parse_debugger_evaluator_output(full_text)
+    summary, test_summary, error_summary, code = _parse_debugger_evaluator_output(full_text)
 
     return {
         "validation_summary": summary,
         "test_summary": test_summary, # Captured in state
+        "error_summary": error_summary, # Captured in state
         "code": code or _get_candidate_code(state),
         "assembled_code": code or state.get("assembled_code", ""),
     }
 
 
-def reset_iterations(state: DebuggerEvaluatorState) -> Dict:
+def reset_iterations(state: DebuggerEvaluatorState) -> dict:
     current_iters = int(state.get("iteration_count", 0))
     global_iters = int(state.get("global_iterations", 0))
     new_global = global_iters + current_iters

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Annotated, Any, Dict, List, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 import re
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -14,11 +14,11 @@ from prompts.integrator_prompts import INTEGRATOR_SYSTEM, build_integrator_compi
 
 
 class IntegratorState(TypedDict, total=False):
-    messages: Annotated[List[BaseMessage], add_messages]
+    messages: Annotated[list[BaseMessage], add_messages]
 
     task: str
-    plan: List[str]
-    workspace: Dict[str, str]
+    plan: list[str]
+    workspace: dict[str, str]
 
     code: str
     assembled_code: str
@@ -27,8 +27,8 @@ class IntegratorState(TypedDict, total=False):
     max_iters: int
 
     compile_attempts: int
-    compile_result: Dict[str, Any]
-    compile_errors: List[str]
+    compile_result: dict[str, Any]
+    compile_errors: list[str]
 
 
 @dataclass(frozen=True)
@@ -72,13 +72,13 @@ def _sanitize_grammo_source(text: str) -> str:
     return s
 
 
-def ensure_system(messages: List[BaseMessage]) -> List[BaseMessage]:
+def ensure_system(messages: list[BaseMessage]) -> list[BaseMessage]:
     if messages and isinstance(messages[0], SystemMessage):
         return messages
     return [INTEGRATOR_SYSTEM, *messages]
 
 
-def integrator_generate(ctx: IntegratorContext, state: IntegratorState) -> Dict:
+def integrator_generate(ctx: IntegratorContext, state: IntegratorState) -> dict:
     msgs = ensure_system(state.get("messages", []))
     ai: AIMessage = ctx.llm_with_tools.invoke(msgs)
 
@@ -111,7 +111,7 @@ def integrator_route_after_generate(state: IntegratorState) -> Literal["tools", 
     return "compile"
 
 
-def integrator_compile(state: IntegratorState) -> Dict:
+def integrator_compile(state: IntegratorState) -> dict:
     code = _sanitize_grammo_source(state.get("assembled_code") or state.get("code") or "")
     result = grammo_compile.invoke({"code": code})
 
@@ -123,7 +123,7 @@ def integrator_compile(state: IntegratorState) -> Dict:
     if (not compiled) and errors:
         compile_errors.append(errors)
 
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "compile_attempts": attempts,
         "compile_result": result,
         "compile_errors": compile_errors,
@@ -149,7 +149,7 @@ def integrator_route_after_compile(state: IntegratorState) -> Literal["generate"
     return "generate"
 
 
-def reset_iterations(state: IntegratorState) -> Dict:
+def reset_iterations(state: IntegratorState) -> dict:
     current_iters = int(state.get("iterations", 0))
     global_iters = int(state.get("global_iterations", 0))
     new_global = global_iters + current_iters

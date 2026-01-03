@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional, Union
+from functools import partial
+from typing import Any
 
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -28,7 +29,7 @@ def _clean_json_text(text: str) -> str:
             text = match.group(1).strip()
     return text
 
-def _try_json_parse_list(text: str) -> List[str]:
+def _try_json_parse_list(text: str) -> list[str]:
     """Attempt to parse JSON as list or dict with 'steps'."""
     try:
         data = json.loads(text)
@@ -41,7 +42,7 @@ def _try_json_parse_list(text: str) -> List[str]:
     return []
 
 
-def _parse_numbered_list(text: str) -> List[str]:
+def _parse_numbered_list(text: str) -> list[str]:
     """Fallback: parse numbered/bulleted list from text."""
     lines = []
     for line in text.splitlines():
@@ -55,7 +56,7 @@ def _parse_numbered_list(text: str) -> List[str]:
     return lines[:10]  # Cap at 10 steps
 
 
-def _parse_plan_json(text: Union[str, list]) -> List[str]:
+def _parse_plan_json(text: str | list) -> list[str]:
     """Robustly parses the plan from LLM output."""
     # 1. Handle weird list outputs from some adapters
     if isinstance(text, list):
@@ -87,7 +88,7 @@ def _is_no(s: str) -> bool:
     no = {"no", "n", "non va bene", "cambia", "modifica", "nope", "not yet", "wrong"}
     return any(tok == s or tok in s for tok in no)
 
-def _config_with_stream(config: Optional[RunnableConfig], stream_tokens: bool) -> RunnableConfig:
+def _config_with_stream(config: RunnableConfig | None, stream_tokens: bool) -> RunnableConfig:
     base = dict(config or {})
     conf = dict(base.get("configurable") or {})
     conf["stream_tokens"] = stream_tokens
@@ -96,89 +97,127 @@ def _config_with_stream(config: Optional[RunnableConfig], stream_tokens: bool) -
 
 # --- Planner Node Definitions ---
 
-def _create_make_plan_node(llm):
-    """Factory for make_plan node."""
-    def make_plan(state: AgentState) -> Dict:
-        original = (state.get("task") or "").strip()
+def make_plan_node(llm: Any, state: AgentState) -> dict:
+    """Node to create the initial plan."""
+    original = (state.get("task") or "").strip()
 
-        # Strong System Prompt with Examples (Few-Shot)
-
-        resp = llm.invoke([SystemMessage(content=MAKE_PLAN_SYSTEM_PROMPT), SystemMessage(content=original)])
-        plan = _parse_plan_json(resp.content)
-        
-        # Safety Check: If plan is still empty or identical to input (Lazy Model), force split
-        if not plan or (len(plan) == 1 and len(plan[0]) > len(original) * 0.8):
-            if "game" in original.lower():
-                plan = [
-                    f"Define data structures for {original}",
-                    "Implement core game logic and rules",
-                    "Implement user input and main loop"
-                ]
-            else:
-                plan = [original]
-
-        return {
-            "original_task": original,
-            "plan": plan,
-            "plan_step": 0,
-        }
-    return make_plan
-
-
-def _create_revise_plan_node(llm):
-    """Factory for revise_plan node."""
-    def revise_plan(state: AgentState) -> Dict:
-        original = (state.get("original_task") or "").strip()
-        feedback = (state.get("task") or "").strip()
-
-        prompt = build_revise_plan_prompt(original, feedback)
-        
-        resp = llm.invoke([REVISE_PLAN_SYSTEM_MESSAGE, SystemMessage(content=prompt)])
-        plan = _parse_plan_json(resp.content)
-        
-        if not plan:
+    # Strong System Prompt with Examples (Few-Shot)
+    resp = llm.invoke([SystemMessage(content=MAKE_PLAN_SYSTEM_PROMPT), SystemMessage(content=original)])
+    plan = _parse_plan_json(resp.content)
+    
+    # Safety Check: If plan is still empty or identical to input (Lazy Model), force split
+    if not plan or (len(plan) == 1 and len(plan[0]) > len(original) * 0.8):
+        if "game" in original.lower():
+            plan = [
+                f"Define data structures for {original}",
+                "Implement core game logic and rules",
+                "Implement user input and main loop"
+            ]
+        else:
             plan = [original]
 
-        return {"plan": plan, "plan_step": 0}
-    return revise_plan
+    return {
+        "original_task": original,
+        "plan": plan,
+        "plan_step": 0,
+    }
+
+
+def revise_plan_node(llm: Any, state: AgentState) -> dict:
+    """Node to revise the plan based on feedback."""
+    original = (state.get("original_task") or "").strip()
+    feedback = (state.get("task") or "").strip()
+
+    prompt = build_revise_plan_prompt(original, feedback)
+    
+    resp = llm.invoke([REVISE_PLAN_SYSTEM_MESSAGE, SystemMessage(content=prompt)])
+    plan = _parse_plan_json(resp.content)
+    
+    if not plan:
+        plan = [original]
+
+    return {"plan": plan, "plan_step": 0}
+
+
+def ask_approval_node(state: AgentState) -> dict:
+    plan = state.get("plan") or []
+    msg = build_ask_approval_message(plan)
+    return {"awaiting_approval": True, "messages": [AIMessage(content=msg)]}
+
+
+def handle_approval_node(state: AgentState) -> dict:
+    answer = (state.get("task") or "").strip()
+
+    if _is_yes(answer):
+        return {
+            "awaiting_approval": False,
+            "messages": [AIMessage(content="Great. Starting step-by-step implementation.")],
+        }
+
+    if _is_no(answer):
+        return {
+            "awaiting_approval": False,
+            "messages": [AIMessage(content="Received. Modifying the plan based on your feedback.")],
+        }
+
+    return {
+        "awaiting_approval": True,
+        "messages": [AIMessage(content="Please reply with 'yes' to confirm or 'no' to modify.")],
+    }
+
+
+def set_next_subtask_node(state: AgentState) -> dict:
+    plan = state.get("plan") or []
+    i = int(state.get("plan_step") or 0)
+    subtask = plan[i] if 0 <= i < len(plan) else "FINISH"
+    return {"task": subtask}
+
+
+def advance_node(state: AgentState) -> dict:
+    return {"plan_step": int(state.get("plan_step") or 0) + 1}
+
+
+def generator_no_stream_node(generator_subgraph: Any, state: AgentState, config: RunnableConfig | None = None) -> dict:
+    return generator_subgraph.invoke(state, config=_config_with_stream(config, False))
+
+
+# --- Routing Functions ---
+
+def entry_route(state: AgentState) -> str:
+    return "handle_approval" if state.get("awaiting_approval", False) else "make_plan"
+
+
+def after_handle_route(state: AgentState) -> str:
+    if state.get("awaiting_approval", False):
+        return "stop"
+    ans = (state.get("task") or "").strip()
+    return "revise_plan" if _is_no(ans) else "execute"
+
+
+def should_continue_route(state: AgentState) -> str:
+    plan = state.get("plan") or []
+    i = int(state.get("plan_step") or 0)
+    return "loop" if i < len(plan) else "end"
 
 
 # --- Planner Subgraph ---
 
-# --- Planner Node Helper Functions ---
+def build_planner_subgraph(llm: Any, generator_subgraph: Any) -> StateGraph:
+    g = StateGraph(AgentState)
 
-def _add_planner_nodes(g: StateGraph, make_plan, revise_plan_node, generator_subgraph, ask_approval, handle_approval, set_next_subtask, advance) -> None:
-    """Add all nodes to the planner graph."""
+    # --- Nodes ---
     g.add_node("entry", lambda state: {})
-    g.add_node("make_plan", make_plan)
-    g.add_node("ask_approval", ask_approval)
-    g.add_node("handle_approval", handle_approval)
-    g.add_node("revise_plan", revise_plan_node)
-    g.add_node("set_next_subtask", set_next_subtask)
-    g.add_node("advance", advance)
+    g.add_node("make_plan", partial(make_plan_node, llm))
+    g.add_node("ask_approval", ask_approval_node)
+    g.add_node("handle_approval", handle_approval_node)
+    g.add_node("revise_plan", partial(revise_plan_node, llm))
+    g.add_node("set_next_subtask", set_next_subtask_node)
+    g.add_node("advance", advance_node)
     
     # Generator Integration
-    def generator_no_stream(state: AgentState, config: Optional[RunnableConfig] = None) -> Dict:
-        return generator_subgraph.invoke(state, config=_config_with_stream(config, False))
-    g.add_node("generator_no_stream", generator_no_stream)
+    g.add_node("generator_no_stream", partial(generator_no_stream_node, generator_subgraph))
 
-
-def _add_planner_edges(g: StateGraph) -> None:
-    """Add all edges to the planner graph."""
-    def entry_route(state: AgentState) -> str:
-        return "handle_approval" if state.get("awaiting_approval", False) else "make_plan"
-    
-    def after_handle_route(state: AgentState) -> str:
-        if state.get("awaiting_approval", False):
-            return "stop"
-        ans = (state.get("task") or "").strip()
-        return "revise_plan" if _is_no(ans) else "execute"
-    
-    def should_continue(state: AgentState) -> str:
-        plan = state.get("plan") or []
-        i = int(state.get("plan_step") or 0)
-        return "loop" if i < len(plan) else "end"
-    
+    # --- Edges ---
     g.add_edge(START, "entry")
     g.add_conditional_edges("entry", entry_route, {
         "make_plan": "make_plan",
@@ -197,57 +236,9 @@ def _add_planner_edges(g: StateGraph) -> None:
     g.add_edge("revise_plan", "ask_approval")
     g.add_edge("set_next_subtask", "generator_no_stream")
     g.add_edge("generator_no_stream", "advance")
-    g.add_conditional_edges("advance", should_continue, {
+    g.add_conditional_edges("advance", should_continue_route, {
         "loop": "set_next_subtask",
         "end": END,
     })
-
-
-def build_planner_subgraph(llm, generator_subgraph):
-    g = StateGraph(AgentState)
-
-    # --- Node Functions (using factories) ---
-    make_plan = _create_make_plan_node(llm)
-    revise_plan_node = _create_revise_plan_node(llm)
-
-    def ask_approval(state: AgentState) -> Dict:
-        plan = state.get("plan") or []
-        msg = build_ask_approval_message(plan)
-        return {"awaiting_approval": True, "messages": [AIMessage(content=msg)]}
-
-    def handle_approval(state: AgentState) -> Dict:
-        answer = (state.get("task") or "").strip()
-
-        if _is_yes(answer):
-            return {
-                "awaiting_approval": False,
-                "messages": [AIMessage(content="Great. Starting step-by-step implementation.")],
-            }
-
-        if _is_no(answer):
-            return {
-                "awaiting_approval": False,
-                "messages": [AIMessage(content="Received. Modifying the plan based on your feedback.")],
-            }
-
-        return {
-            "awaiting_approval": True,
-            "messages": [AIMessage(content="Please reply with 'yes' to confirm or 'no' to modify.")],
-        }
-
-    # --- Execution Logic ---
-
-    def set_next_subtask(state: AgentState) -> Dict:
-        plan = state.get("plan") or []
-        i = int(state.get("plan_step") or 0)
-        subtask = plan[i] if 0 <= i < len(plan) else "FINISH"
-        return {"task": subtask}
-
-    def advance(state: AgentState) -> Dict:
-        return {"plan_step": int(state.get("plan_step") or 0) + 1}
-
-    # --- Graph Construction ---
-    _add_planner_nodes(g, make_plan, revise_plan_node, generator_subgraph, ask_approval, handle_approval, set_next_subtask, advance)
-    _add_planner_edges(g)
 
     return g.compile()

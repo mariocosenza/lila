@@ -19,6 +19,7 @@ DEBUGGER_EVALUATOR_SYSTEM = SystemMessage(
         "You MUST format your output exactly as follows:\n"
         "SUMMARY: [Concise summary of what the program does]\n"
         "TESTS: [Summary of test results, e.g. 'Passed', 'Failed', 'Not Run']\n"
+        "ERRORS: [Summary of compilation errors, if any]\n"
         "[...Raw Grammo Code Here...]\n\n"
         "⛔ **NEGATIVE CONSTRAINTS** ⛔\n"
         "- **DO NOT** repeat the Grammar Specification.\n"
@@ -42,5 +43,5 @@ def build_debugger_evaluator_compile_failure_message(errors: str) -> str:
         "Compilation failed. Apply the smallest possible fix.\n"
         f"Errors:\n{errors or '(no details)'}\n\n"
         "Return strict format:\n"
-        "SUMMARY: ...\nTESTS: ...\n[Code]"
+        "SUMMARY: ...\nTESTS: ...\nERRORS: ...\n[Code]"
     )

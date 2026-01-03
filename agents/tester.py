@@ -7,7 +7,7 @@ import threading
 from langchain.tools import tool
 from dataclasses import dataclass
 from functools import partial
-from typing import Annotated, Any, Dict, List, Literal, TypedDict, Optional
+from typing import Annotated, Any, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -33,6 +33,19 @@ class RunTestsInput(BaseModel):
     code: str = Field(description="Grammo program source code")
     tests: str = Field(description="Test plan or test cases")
 
+def _target_coro_sync(coro, res: dict[str, Any]):
+    try:
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        res["value"] = new_loop.run_until_complete(coro)
+    except Exception as e:
+        res["error"] = e
+    finally:
+        try:
+            new_loop.close()
+        except Exception:
+            pass
+
 def _run_coro_sync(coro):
     """Safely run an async coroutine from a synchronous context."""
     try:
@@ -40,20 +53,8 @@ def _run_coro_sync(coro):
     except RuntimeError:
         return asyncio.run(coro)
     else:
-        res: Dict[str, Any] = {}
-        def _target():
-            try:
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                res["value"] = new_loop.run_until_complete(coro)
-            except Exception as e:
-                res["error"] = e
-            finally:
-                try:
-                    new_loop.close()
-                except Exception:
-                    pass
-        t = threading.Thread(target=_target, daemon=True)
+        res: dict[str, Any] = {}
+        t = threading.Thread(target=_target_coro_sync, args=(coro, res), daemon=True)
         t.start()
         t.join()
         if "error" in res:
@@ -61,7 +62,7 @@ def _run_coro_sync(coro):
         return res.get("value")
 
 @tool("run_grammo_tests", args_schema=RunTestsInput)
-def run_grammo_tests(code: str, tests: str) -> Dict[str, Any]:
+def run_grammo_tests(code: str, tests: str) -> dict[str, Any]:
     """Run Grammo tests against provided source code."""
     logger.info(f"🔧 [TOOL EXEC] Running tests... (Code len: {len(code)}, Tests len: {len(tests)})")
     try:
@@ -89,11 +90,11 @@ TOOLS = [run_grammo_tests]
 
 
 class TesterState(TypedDict, total=False):
-    messages: Annotated[List[BaseMessage], add_messages]
+    messages: Annotated[list[BaseMessage], add_messages]
     code: str
     original_code: str
     tests: str
-    test_result: Dict[str, Any]
+    test_result: dict[str, Any]
     test_attempts: int
     max_test_attempts: int
 
@@ -110,7 +111,7 @@ def build_ollama_llm(model: str = "gpt-oss-20b", base_url: str = "http://localho
         temperature=0.0
     )
 
-def _init_original_code(state: TesterState) -> Dict:
+def _init_original_code(state: TesterState) -> dict:
     """Snapshot the original code before testing begins."""
     if state.get("original_code"):
         return {}
@@ -122,7 +123,7 @@ def _init_original_code(state: TesterState) -> Dict:
         "test_attempts": 0
     }
 
-def tester_generate(ctx: TesterContext, state: TesterState) -> Dict:
+def tester_generate(ctx: TesterContext, state: TesterState) -> dict:
     """Generates tests, or patches code and re-tests."""
     attempts = int(state.get("test_attempts", 0))
     logger.info(f"🧠 [STEP: GENERATE] Attempt {attempts + 1}...")
@@ -164,7 +165,7 @@ def tester_route(state: TesterState) -> Literal["tools", "__end__"]:
     logger.info("⏹️ [DECISION] No tool call detected. Ending graph.")
     return "__end__"
 
-def _extract_tool_result_from_messages(msgs: List[BaseMessage]) -> Dict[str, Any]:
+def _extract_tool_result_from_messages(msgs: list[BaseMessage]) -> dict[str, Any]:
     for m in reversed(msgs):
         if isinstance(m, ToolMessage) and m.name == "run_grammo_tests":
             content = m.content
@@ -176,8 +177,8 @@ def _extract_tool_result_from_messages(msgs: List[BaseMessage]) -> Dict[str, Any
                 return {"stderr": str(content)}
     return {}
 
-def _extract_ai_tool_args(msgs: List[BaseMessage]) -> Dict[str, str]:
-    args: Dict[str, str] = {}
+def _extract_ai_tool_args(msgs: list[BaseMessage]) -> dict[str, str]:
+    args: dict[str, str] = {}
     if msgs:
         last_ai_msg = next((m for m in reversed(msgs) if isinstance(m, AIMessage)), None)
         if last_ai_msg and last_ai_msg.tool_calls:
@@ -188,7 +189,7 @@ def _extract_ai_tool_args(msgs: List[BaseMessage]) -> Dict[str, str]:
                 args["code"] = tool_args["code"]
     return args
 
-def tester_collect(state: TesterState) -> Dict:
+def tester_collect(state: TesterState) -> dict:
     """Analyze tool output and update state code/tests."""
     msgs = state.get("messages", [])
     
@@ -199,7 +200,7 @@ def tester_collect(state: TesterState) -> Dict:
 
     logger.info(f"📝 [STEP: COLLECT] Analysis Complete. Passed: {passed} (Attempt {attempts}/{max_attempts})")
 
-    updates: Dict[str, Any] = {
+    updates: dict[str, Any] = {
         "test_result": result,
         "test_attempts": attempts,
     }

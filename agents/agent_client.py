@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 import warnings
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 # UI Improvements
 from rich.console import Console
@@ -91,7 +91,7 @@ def _preview_message(m: BaseMessage, max_len: int = 220) -> str:
 
 def _build_structured_answer(summary: str, safety: str, code: str) -> str:
     """Build answer from structured fields (summary, safety, code)."""
-    parts: List[str] = []
+    parts: list[str] = []
     
     if isinstance(summary, str) and summary.strip():
         parts.append(f"**SUMMARY**: {summary.strip()}")
@@ -106,9 +106,9 @@ def _build_structured_answer(summary: str, safety: str, code: str) -> str:
     return "\n\n".join(parts)
 
 
-def _extract_message_answer(final_state: Dict[str, Any]) -> str:
+def _extract_message_answer(final_state: dict[str, Any]) -> str:
     """Fallback to the last message if no structured data."""
-    msgs: List[BaseMessage] = final_state.get("messages") or []
+    msgs: list[BaseMessage] = final_state.get("messages") or []
     if msgs:
         last = msgs[-1]
         content = getattr(last, "content", "") or ""
@@ -117,7 +117,7 @@ def _extract_message_answer(final_state: Dict[str, Any]) -> str:
     return "No output generated."
 
 
-def _extract_answer(final_state: Dict[str, Any]) -> str:
+def _extract_answer(final_state: dict[str, Any]) -> str:
     """
     Extracts the final answer from state.
     Code is wrapped in Markdown blocks to preserve indentation.
@@ -135,17 +135,17 @@ def _extract_answer(final_state: Dict[str, Any]) -> str:
     return _extract_message_answer(final_state)
 
 
-def _fmt_namespace(ns: Tuple[str, ...]) -> str:
+def _fmt_namespace(ns: tuple[str, ...]) -> str:
     if not ns:
         return "root"
-    parts: List[str] = []
+    parts: list[str] = []
     for item in ns:
         raw = str(item)
         parts.append(raw.split(":", 1)[0])
     return "/".join(parts)
 
 
-def _print_updates(ns: Tuple[str, ...], node: str, updates: Dict[str, Any]) -> None:
+def _print_updates(ns: tuple[str, ...], node: str, updates: dict[str, Any]) -> None:
     msg_patch = updates.get("messages") if isinstance(updates, dict) else None
     interrupt_patch = updates.get("__interrupt__") if isinstance(updates, dict) else None
 
@@ -171,7 +171,7 @@ def _print_updates(ns: Tuple[str, ...], node: str, updates: Dict[str, Any]) -> N
         console.print(f"  [trace.content]• {k}:[/trace.content] {_safe_preview(v)}")
 
 
-def _print_debug(ns: Tuple[str, ...], chunk: Any) -> None:
+def _print_debug(ns: tuple[str, ...], chunk: Any) -> None:
     phase = _fmt_namespace(ns)
     
     if isinstance(chunk, dict):
@@ -195,9 +195,9 @@ def _print_debug(ns: Tuple[str, ...], chunk: Any) -> None:
     console.print(f"[{_ts()}] [{phase}] DEBUG: {_safe_preview(chunk, max_len=500)}\n", style="dim")
 
 
-def _split_stream_item(item: Any) -> Tuple[Tuple[str, ...], Optional[str], Any]:
-    ns: Tuple[str, ...] = ()
-    mode: Optional[str] = None
+def _split_stream_item(item: Any) -> tuple[tuple[str, ...], str | None, Any]:
+    ns: tuple[str, ...] = ()
+    mode: str | None = None
     chunk: Any = item
 
     if isinstance(item, tuple):
@@ -218,7 +218,7 @@ def _split_stream_item(item: Any) -> Tuple[Tuple[str, ...], Optional[str], Any]:
     return ns, mode, chunk
 
 
-def _handle_updates_mode(chunk: Dict, ns: Tuple[str, ...], final_state: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_updates_mode(chunk: dict, ns: tuple[str, ...], final_state: dict[str, Any]) -> dict[str, Any]:
     """Handle updates from stream item."""
     for node, patch in chunk.items():
         if node == "__final__":
@@ -230,7 +230,7 @@ def _handle_updates_mode(chunk: Dict, ns: Tuple[str, ...], final_state: Dict[str
     return final_state
 
 
-def _process_stream_item(item: Any, final_state: Dict[str, Any]) -> Dict[str, Any]:
+def _process_stream_item(item: Any, final_state: dict[str, Any]) -> dict[str, Any]:
     """Process a single stream item and update final_state if needed."""
     ns, mode, chunk = _split_stream_item(item)
     eff_mode = mode or ("updates" if isinstance(chunk, dict) else "debug")
@@ -244,7 +244,7 @@ def _process_stream_item(item: Any, final_state: Dict[str, Any]) -> Dict[str, An
     return final_state
 
 
-def _retrieve_final_state(app, config: Dict, state_in: Dict) -> Dict[str, Any]:
+def _retrieve_final_state(app, config: dict, state_in: dict) -> dict[str, Any]:
     """Retrieve final state with fallbacks."""
     try:
         snap = app.get_state(config)
@@ -255,9 +255,9 @@ def _retrieve_final_state(app, config: Dict, state_in: Dict) -> Dict[str, Any]:
     return app.invoke(state_in, config=config)
 
 
-def _execute_with_trace(app, state_in: Dict, config: Dict, stream_mode: Any) -> Dict[str, Any]:
+def _execute_with_trace(app, state_in: dict, config: dict, stream_mode: Any) -> dict[str, Any]:
     """Execute app with tracing enabled."""
-    final_state: Dict[str, Any] = {}
+    final_state: dict[str, Any] = {}
     
     console.rule("[bold blue]Execution Trace", align="left", style="blue")
 
@@ -279,9 +279,9 @@ def _execute_with_trace(app, state_in: Dict, config: Dict, stream_mode: Any) -> 
 def run_turn(
     app,
     thread_id: str,
-    messages: List[BaseMessage],
+    messages: list[BaseMessage],
     trace_level: TraceLevel = "basic",
-) -> Tuple[Dict[str, Any], List[BaseMessage]]:
+) -> tuple[dict[str, Any], list[BaseMessage]]:
     state_in = {
         "messages": messages, 
         "iterations": 0, 
@@ -289,7 +289,7 @@ def run_turn(
         "global_iterations": 0,
         "max_global_iters": 50
     }
-    final_state: Dict[str, Any] = {}
+    final_state: dict[str, Any] = {}
 
     config = {
         "configurable": {"thread_id": thread_id},
@@ -304,14 +304,14 @@ def run_turn(
         final_state = _execute_with_trace(app, state_in, config, stream_mode)
 
     # Sync local transcript
-    out_msgs: List[BaseMessage] = final_state.get("messages") or []
+    out_msgs: list[BaseMessage] = final_state.get("messages") or []
     if out_msgs:
         messages[:] = out_msgs
 
     return final_state, messages
 
 
-def _parse_trace_cmd(user_in: str, current: TraceLevel) -> Tuple[bool, TraceLevel, str]:
+def _parse_trace_cmd(user_in: str, current: TraceLevel) -> tuple[bool, TraceLevel, str]:
     parts = user_in.strip().split()
     if not parts or parts[0] != ":trace":
         return False, current, ""
@@ -330,8 +330,8 @@ def _parse_trace_cmd(user_in: str, current: TraceLevel) -> Tuple[bool, TraceLeve
     return True, current, "[danger]Usage:[/danger] :trace off|basic|debug"
 
 
-def main() -> None:
-    # --- Health Check ---
+def _check_health_status() -> None:
+    """Check and print the status of the Tester Service."""
     console.print("[dim]Checking Tester Service status...[/dim]")
     if check_tester_service():
         console.print("[bold green]✅ Tester Service is ONLINE[/bold green]")
@@ -339,16 +339,49 @@ def main() -> None:
         console.print(f"[bold red]❌ Tester Service is UNREACHABLE at {TESTER_URL}[/bold red]")
         console.print("[yellow]Warning: Testing capabilities will be disabled.[/yellow]")
 
-    app = build_app()
-    thread_id = str(uuid.uuid4())
 
+def _print_welcome_banner() -> None:
+    """Print the application welcome banner and help text."""
     console.print(Panel.fit(
-        "[bold magenta]IDLP Console Client[/bold magenta]\n[dim]LangGraph Streaming Interface[/dim]", 
+        "[bold magenta]Grammo Console Client[/bold magenta]\n[dim]LangGraph Streaming Interface[/dim]", 
         border_style="magenta"
     ))
     console.print("[dim]Commands: ':quit' to exit, ':new' new session, ':trace off|basic|debug'[/dim]\n")
 
-    messages: List[BaseMessage] = []
+
+def _run_and_display(
+    app: Any, 
+    thread_id: str, 
+    messages: list[BaseMessage], 
+    trace_level: TraceLevel,
+    user_in: str
+) -> list[BaseMessage]:
+    """Run a single turn of the agent and display the results."""
+    messages.append(HumanMessage(content=user_in))
+    final_state, messages = run_turn(app, thread_id, messages, trace_level=trace_level)
+
+    if trace_level != "off":
+        console.rule("[bold blue]End Trace", align="left", style="blue")
+        console.print("")
+
+    answer = _extract_answer(final_state)
+    
+    if answer:
+        console.print(Panel(Markdown(answer), title="[bold]Assistant[/bold]", border_style="green"))
+        console.print("")
+    
+    return messages
+
+
+def main() -> None:
+    _check_health_status()
+
+    app = build_app()
+    thread_id = str(uuid.uuid4())
+
+    _print_welcome_banner()
+
+    messages: list[BaseMessage] = []
     trace_level: TraceLevel = "basic"
 
     while True:
@@ -377,19 +410,7 @@ def main() -> None:
             console.print(f"[info]{msg}[/info]\n")
             continue
 
-        messages.append(HumanMessage(content=user_in))
-
-        final_state, messages = run_turn(app, thread_id, messages, trace_level=trace_level)
-
-        if trace_level != "off":
-            console.rule("[bold blue]End Trace", align="left", style="blue")
-            console.print("")
-
-        answer = _extract_answer(final_state)
-        
-        if answer:
-            console.print(Panel(Markdown(answer), title="[bold]Assistant[/bold]", border_style="green"))
-            console.print("")
+        messages = _run_and_display(app, thread_id, messages, trace_level, user_in)
 
 
 if __name__ == "__main__":

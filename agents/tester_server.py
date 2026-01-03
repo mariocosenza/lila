@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 import uvicorn
-from typing import Any, Dict
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, APIRouter
 from pydantic import BaseModel, Field
 
 from langchain_core.messages import HumanMessage
@@ -20,7 +20,51 @@ class A2ARequest(BaseModel):
 
 class A2AResponse(BaseModel):
     tests: str
-    result: Dict[str, Any]
+    result: dict[str, Any]
+
+# --- Router & Handlers ---
+router = APIRouter()
+
+@router.get("/health")
+def health_check(request: Request):
+    """Endpoint to check if the server is online."""
+    graph = getattr(request.app.state, "graph", None)
+    if graph is None:
+        raise HTTPException(status_code=503, detail="Graph not initialized")
+    return {
+        "status": "ok", 
+        "backend": "ollama", 
+        "model": getattr(request.app.state, "ollama_model", "unknown"), 
+        "url": getattr(request.app.state, "ollama_base_url", "unknown")
+    }
+
+@router.post("/invoke", response_model=A2AResponse)
+def invoke(req: A2ARequest, request: Request) -> A2AResponse:
+    graph = getattr(request.app.state, "graph", None)
+    if graph is None:
+        raise HTTPException(status_code=500, detail="Tester graph is not initialized.")
+
+    print(f"📩 Received request for task: {req.task[:50]}...")
+
+    # Construct the initial message for the Tester Agent
+    msg = HumanMessage(
+        content=build_tester_server_invoke_prompt(req.task)
+    )
+
+    try:
+        # Invoke the local graph
+        final_state = graph.invoke({"messages": [msg], "code": req.code})
+        
+        # Extract results from the final state
+        tests = (final_state.get("tests") or "").strip()
+        result = final_state.get("test_result") or {}
+        
+        print("✅ Test execution completed.")
+        return A2AResponse(tests=tests, result=result)
+        
+    except Exception as e:
+        print(f"❌ Error during invocation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # --- App Definition ---
 def create_app() -> FastAPI:
@@ -41,44 +85,11 @@ def create_app() -> FastAPI:
         print(f"❌ Error building graph: {e}")
         graph = None
 
-    @app.get("/health")
-    def health_check():
-        """Endpoint to check if the server is online."""
-        if graph is None:
-            raise HTTPException(status_code=503, detail="Graph not initialized")
-        return {
-            "status": "ok", 
-            "backend": "ollama", 
-            "model": ollama_model, 
-            "url": ollama_base_url
-        }
+    app.state.graph = graph
+    app.state.ollama_model = ollama_model
+    app.state.ollama_base_url = ollama_base_url
 
-    @app.post("/invoke", response_model=A2AResponse)
-    def invoke(req: A2ARequest) -> A2AResponse:
-        if graph is None:
-            raise HTTPException(status_code=500, detail="Tester graph is not initialized.")
-
-        print(f"📩 Received request for task: {req.task[:50]}...")
-
-        # Construct the initial message for the Tester Agent
-        msg = HumanMessage(
-            content=build_tester_server_invoke_prompt(req.task)
-        )
-
-        try:
-            # Invoke the local graph
-            final_state = graph.invoke({"messages": [msg], "code": req.code})
-            
-            # Extract results from the final state
-            tests = (final_state.get("tests") or "").strip()
-            result = final_state.get("test_result") or {}
-            
-            print("✅ Test execution completed.")
-            return A2AResponse(tests=tests, result=result)
-            
-        except Exception as e:
-            print(f"❌ Error during invocation: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+    app.include_router(router)
 
     return app
 

@@ -2,7 +2,7 @@ import os
 import time
 import logging
 import re
-from typing import Annotated, Dict, List, TypedDict, Any, Optional
+from typing import Annotated, TypedDict, Any
 
 from tenacity import (
     retry,
@@ -32,15 +32,15 @@ class AgentState(TypedDict, total=False):
     Shared state for all agents (Orchestrator, Generator, Planner, Tester, DebuggerEvaluator).
     """
     # Message History
-    messages: Annotated[List[BaseMessage], add_messages]
+    messages: Annotated[list[BaseMessage], add_messages]
     
     # Task Routing & Planning
     route: str
     task: str
     original_task: str
-    workspace: Dict[str, str]
-    diagnostics: List[str]
-    plan: List[str]
+    workspace: dict[str, str]
+    diagnostics: list[str]
+    plan: list[str]
     plan_step: int
     awaiting_approval: bool
     run_tests: bool  # Flag to force testing
@@ -51,12 +51,12 @@ class AgentState(TypedDict, total=False):
     
     # --- Compilation State ---
     compile_attempts: int
-    compile_result: Dict[str, Any]
-    compile_errors: List[str]
+    compile_result: dict[str, Any]
+    compile_errors: list[str]
     
     # --- Testing State ---
     tests: str
-    test_result: Dict[str, Any]
+    test_result: dict[str, Any]
     
     # --- Validation & Finalization ---
     validated_code: str
@@ -93,7 +93,7 @@ def _is_retryable_error(exception: Exception) -> bool:
     return False
 
 
-def _extract_retry_delay(exception: Exception, default_delay: float = None) -> Optional[float]:
+def _extract_retry_delay(exception: Exception, default_delay: float = None) -> float | None:
     """
     Attempts to extract the requested retry delay from an exception 
     (or its underlying cause).
@@ -173,7 +173,7 @@ class _GeminiSafeWrapper:
     def __init__(self, llm: Any):
         self._llm = llm
 
-    def _merge_system_for_gemma(self, valid_msgs: List[BaseMessage]) -> List[BaseMessage]:
+    def _merge_system_for_gemma(self, valid_msgs: list[BaseMessage]) -> list[BaseMessage]:
         """Merge SystemMessage into first HumanMessage for Gemma models."""
         system_content = []
         chat_msgs = []
@@ -214,7 +214,7 @@ class _GeminiSafeWrapper:
             return inp
 
         # 1. Filter empty messages
-        valid_msgs: List[BaseMessage] = []
+        valid_msgs: list[BaseMessage] = []
         for m in inp:
             content = getattr(m, "content", None)
             if isinstance(content, str) and content.strip() == "":
@@ -267,7 +267,7 @@ class _GeminiSafeWrapper:
 
     # ---- Runnable / ChatModel interface methods (delegated) ----
 
-    def invoke(self, input: Any, config: Optional[dict] = None, **kwargs: Any) -> Any:
+    def invoke(self, input: Any, config: dict | None = None, **kwargs: Any) -> Any:
         return self._execute_with_retry(
             "invoke", 
             self._sanitize_messages(input), 
@@ -275,7 +275,7 @@ class _GeminiSafeWrapper:
             **kwargs
         )
 
-    async def ainvoke(self, input: Any, config: Optional[dict] = None, **kwargs: Any) -> Any:
+    async def ainvoke(self, input: Any, config: dict | None = None, **kwargs: Any) -> Any:
         return await self._aexecute_with_retry(
             "ainvoke", 
             self._sanitize_messages(input), 
@@ -283,7 +283,7 @@ class _GeminiSafeWrapper:
             **kwargs
         )
 
-    def batch(self, inputs: List[Any], config: Optional[dict] = None, **kwargs: Any) -> Any:
+    def batch(self, inputs: list[Any], config: dict | None = None, **kwargs: Any) -> Any:
         sanitized = [self._sanitize_messages(i) for i in inputs]
         return self._execute_with_retry(
             "batch", 
@@ -292,7 +292,7 @@ class _GeminiSafeWrapper:
             **kwargs
         )
 
-    async def abatch(self, inputs: List[Any], config: Optional[dict] = None, **kwargs: Any) -> Any:
+    async def abatch(self, inputs: list[Any], config: dict | None = None, **kwargs: Any) -> Any:
         sanitized = [self._sanitize_messages(i) for i in inputs]
         return await self._aexecute_with_retry(
             "abatch", 
@@ -308,7 +308,7 @@ class _GeminiSafeWrapper:
             return delay + 1.0
         return min(60, 2 * (2 ** (getattr(self, "_stream_attempt", 1) - 1)))
 
-    def stream(self, input: Any, config: Optional[dict] = None, **kwargs: Any):
+    def stream(self, input: Any, config: dict | None = None, **kwargs: Any):
         attempt = 0
         max_attempts = 12
         
@@ -328,7 +328,7 @@ class _GeminiSafeWrapper:
                 else:
                     raise
 
-    async def astream(self, input: Any, config: Optional[dict] = None, **kwargs: Any):
+    async def astream(self, input: Any, config: dict | None = None, **kwargs: Any):
         attempt = 0
         max_attempts = 12
         import asyncio
