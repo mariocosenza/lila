@@ -1,0 +1,22 @@
+name: lila_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.10
+  - pip
+  - pip:
+    - langgraph
+    - langchain
+    - langchain-core
+    - langchain-community
+    - langchain-ollama
+    - fastmcp
+    - pydantic
+    - lark
+    - llvmlite
+    - requests
+    - uvicorn
+    - fastapi
+    - python-dotenv
+    - pytest
