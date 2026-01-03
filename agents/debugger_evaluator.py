@@ -202,6 +202,11 @@ def debugger_evaluator_finalize(state: DebuggerEvaluatorState) -> dict:
     # Parse all fields
     summary, test_summary, error_summary, code = _parse_debugger_evaluator_output(full_text)
 
+    # Fallback: If error_summary is empty but we have compile errors in history, use them
+    if not error_summary and state.get("compile_errors"):
+        last_error = state["compile_errors"][-1]
+        error_summary = f"Fixed previous error: {last_error[:100]}..."
+
     return {
         "validation_summary": summary,
         "test_summary": test_summary, # Captured in state
@@ -220,7 +225,13 @@ def reset_iterations(state: DebuggerEvaluatorState) -> dict:
         # Force exit by setting iteration_count high
         return {"iteration_count": 999, "global_iterations": new_global}
         
-    return {"iteration_count": 0, "global_iterations": new_global}
+    # Reset local counters for the evaluator session
+    return {
+        "iteration_count": 0, 
+        "global_iterations": new_global,
+        "compile_attempts": 0,  # Reset compile attempts so we don't exit immediately
+        "compile_errors": []    # Optional: clear previous errors to start fresh debugging
+    }
 
 
 def build_debugger_evaluator_subgraph(llm):

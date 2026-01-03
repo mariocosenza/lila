@@ -13,7 +13,7 @@ from langgraph.prebuilt import ToolNode
 
 from mcp_client import grammo_compiler_mcp, grammo_lark_mcp
 from prompts.generator_prompts import GRAMMO_SYSTEM, build_generator_compile_failure_message
-import asyncio, threading
+from utils import sanitize_grammo_source, run_async_in_sync
 import re
 
 # ==========================================
@@ -24,44 +24,6 @@ import re
 # 2. Helper Functions
 # ==========================================
 
-def _sanitize_grammo_source(text: str) -> str:
-    """Best-effort sanitizer to ensure only Grammo source is passed to the compiler.
-
-    Common failure mode: the LLM prefixes the program with natural-language
-    explanations or wraps code in markdown fences.
-    """
-    if text is None:
-        return ""
-
-    t = str(text).strip()
-    if not t:
-        return ""
-
-    # Strip markdown code fences if present.
-    if '```' in t:
-        m = re.search(r"```(?:\w+)?\s*\n(.*?)\n```", t, flags=re.DOTALL)
-        if m:
-            t = m.group(1).strip()
-        else:
-            t = t.replace('```', '').strip()
-
-    # Drop leading natural-language / meta lines until we hit 'func' or 'var'.
-    lines = t.splitlines()
-    start_idx = None
-    for i, line in enumerate(lines):
-        s = line.lstrip()
-        if not s:
-            continue
-        if s.startswith(('func', 'var')):
-            start_idx = i
-            break
-
-    if start_idx is not None and start_idx > 0:
-        t = "\n".join(lines[start_idx:]).strip()
-
-    return t
-
-
 class GrammoCode(BaseModel):
     code: str = Field(
         description=(
@@ -69,21 +31,6 @@ class GrammoCode(BaseModel):
             "No surrounding markdown fences; just the source text."
         )
     )
-
-def _target_sync(coro, res: dict[str, Any]):
-    res['value'] = asyncio.run(coro)
-
-def _run_sync(coro):
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    else:
-        res: dict[str, Any] = {}
-        t = threading.Thread(target=_target_sync, args=(coro, res))
-        t.start()
-        t.join()
-        return res.get('value')
 
 # ==========================================
 # 3. Tools
@@ -94,38 +41,8 @@ def grammo_lark(code: str) -> str:
     """
     Check the given source string with the Lark syntax checker.
     """
-    result = _run_sync(grammo_lark_mcp(code))
+    result = run_async_in_sync(grammo_lark_mcp(code))
     return f"Lark syntax check result: {result}"
-
-
-def _target_sync_compile(coro, res: dict[str, Any]):
-    try:
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        res["value"] = new_loop.run_until_complete(coro)
-    except Exception as e:
-        res["error"] = e
-    finally:
-        try:
-            new_loop.close()
-        except Exception:
-            pass
-
-def _run_sync_compile(coro):
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    else:
-        res: dict[str, Any] = {}
-
-        t = threading.Thread(target=_target_sync_compile, args=(coro, res), daemon=True)
-        t.start()
-        t.join()
-
-        if "error" in res:
-            raise res["error"]
-        return res.get("value")
 
 
 @tool("grammo_compile", args_schema=GrammoCode)
@@ -133,7 +50,7 @@ def grammo_compile(code: str) -> dict[str, str]:
     """
     Compile a source string into Grammo format.
     """
-    result = _run_sync_compile(grammo_compiler_mcp(code))
+    result = run_async_in_sync(grammo_compiler_mcp(code))
 
     # Ensure a stable dict shape even if upstream returns weird types
     if not isinstance(result, dict):
@@ -184,7 +101,7 @@ def generator_generate(ctx: GeneratorContext, state: GeneratorState) -> dict:
     iters = int(state.get("iterations", 0)) + 1
     max_iters = int(state.get("max_iters", 5))
 
-    code = _sanitize_grammo_source(ai.content or "")
+    code = sanitize_grammo_source(ai.content or "")
     
     # If code is empty and no tool calls, try to recover by asking explicitly next time
     # But we can't easily inject a message here without returning it.
@@ -216,7 +133,7 @@ def generator_route_after_generate(state: GeneratorState) -> Literal["tools", "c
 
 
 def generator_compile(state: GeneratorState) -> dict:
-    code = _sanitize_grammo_source(state.get("code") or "")
+    code = sanitize_grammo_source(state.get("code") or "")
 
     # Safety check: If code is empty, don't even try to compile, just fail.
     if not code or len(code.strip()) < 10:
@@ -282,9 +199,20 @@ def reset_iterations(state: GeneratorState) -> dict:
     if new_global > int(state.get("max_global_iters", 30)):
         # Stop execution if global limit reached
         # We can't easily stop the whole graph from here, but we can set max_iters to 0 to force exit
-        return {"iterations": 0, "global_iterations": new_global, "max_iters": 0}
+        return {
+            "iterations": 0, 
+            "global_iterations": new_global, 
+            "max_iters": 0,
+            "compile_attempts": 0,
+            "compile_errors": []
+        }
         
-    return {"iterations": 0, "global_iterations": new_global}
+    return {
+        "iterations": 0, 
+        "global_iterations": new_global,
+        "compile_attempts": 0,
+        "compile_errors": []
+    }
 
 
 def build_generator_subgraph(llm):

@@ -11,6 +11,7 @@ from langgraph.prebuilt import ToolNode
 
 from generator import grammo_compile, TOOLS as GENERATOR_TOOLS
 from prompts.integrator_prompts import INTEGRATOR_SYSTEM, build_integrator_compile_failure_message, GRAMMO_LARK_SPEC
+from utils import sanitize_grammo_source
 
 
 class IntegratorState(TypedDict, total=False):
@@ -36,42 +37,6 @@ class IntegratorContext:
     llm_with_tools: object
 
 
-def _sanitize_grammo_source(text: str) -> str:
-    """Best-effort sanitizer to ensure only Grammo source is compiled.
-
-    Removes markdown fences and drops leading natural-language/meta lines until
-    the first plausible top-level declaration (`func` or `var`).
-    """
-    if text is None:
-        return ""
-
-    s = str(text).strip()
-    if not s:
-        return ""
-
-    if '```' in s:
-        m = re.search(r"```(?:\w+)?\s*\n(.*?)\n```", s, flags=re.DOTALL)
-        if m:
-            s = m.group(1).strip()
-        else:
-            s = s.replace('```', '').strip()
-
-    lines = s.splitlines()
-    start_idx = None
-    for i, line in enumerate(lines):
-        line_s = line.lstrip()
-        if not line_s:
-            continue
-        if line_s.startswith(('func', 'var')):
-            start_idx = i
-            break
-
-    if start_idx is not None and start_idx > 0:
-        s = "\n".join(lines[start_idx:]).strip()
-
-    return s
-
-
 def ensure_system(messages: list[BaseMessage]) -> list[BaseMessage]:
     if messages and isinstance(messages[0], SystemMessage):
         return messages
@@ -84,7 +49,7 @@ def integrator_generate(ctx: IntegratorContext, state: IntegratorState) -> dict:
 
     iters = int(state.get("iterations", 0)) + 1
     max_iters = int(state.get("max_iters", 5))
-    code = _sanitize_grammo_source(ai.content or "")
+    code = sanitize_grammo_source(ai.content or "")
 
     return {
         "messages": [ai],
@@ -112,7 +77,7 @@ def integrator_route_after_generate(state: IntegratorState) -> Literal["tools", 
 
 
 def integrator_compile(state: IntegratorState) -> dict:
-    code = _sanitize_grammo_source(state.get("assembled_code") or state.get("code") or "")
+    code = sanitize_grammo_source(state.get("assembled_code") or state.get("code") or "")
     result = grammo_compile.invoke({"code": code})
 
     attempts = int(state.get("compile_attempts", 0)) + 1
@@ -155,9 +120,20 @@ def reset_iterations(state: IntegratorState) -> dict:
     new_global = global_iters + current_iters
     
     if new_global > int(state.get("max_global_iters", 30)):
-        return {"iterations": 0, "global_iterations": new_global, "max_iters": 0}
+        return {
+            "iterations": 0, 
+            "global_iterations": new_global, 
+            "max_iters": 0,
+            "compile_attempts": 0,
+            "compile_errors": []
+        }
         
-    return {"iterations": 0, "global_iterations": new_global}
+    return {
+        "iterations": 0, 
+        "global_iterations": new_global,
+        "compile_attempts": 0,
+        "compile_errors": []
+    }
 
 
 def build_integrator_subgraph(llm):

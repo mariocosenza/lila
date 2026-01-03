@@ -19,7 +19,7 @@ from langgraph.prebuilt import ToolNode
 from mcp_client import grammo_test_mcp
 from integrator import GRAMMO_LARK_SPEC
 from prompts.tester_prompts import TESTER_SYSTEM_CONTENT, build_initial_test_prompt, build_debug_test_prompt
-
+from utils import run_async_in_sync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,41 +33,13 @@ class RunTestsInput(BaseModel):
     code: str = Field(description="Grammo program source code")
     tests: str = Field(description="Test plan or test cases")
 
-def _target_coro_sync(coro, res: dict[str, Any]):
-    try:
-        new_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(new_loop)
-        res["value"] = new_loop.run_until_complete(coro)
-    except Exception as e:
-        res["error"] = e
-    finally:
-        try:
-            new_loop.close()
-        except Exception:
-            pass
-
-def _run_coro_sync(coro):
-    """Safely run an async coroutine from a synchronous context."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    else:
-        res: dict[str, Any] = {}
-        t = threading.Thread(target=_target_coro_sync, args=(coro, res), daemon=True)
-        t.start()
-        t.join()
-        if "error" in res:
-            raise res["error"]
-        return res.get("value")
-
 @tool("run_grammo_tests", args_schema=RunTestsInput)
 def run_grammo_tests(code: str, tests: str) -> dict[str, Any]:
     """Run Grammo tests against provided source code."""
     logger.info(f"🔧 [TOOL EXEC] Running tests... (Code len: {len(code)}, Tests len: {len(tests)})")
     try:
         # Calls the client MCP logic
-        result = _run_coro_sync(grammo_test_mcp(code, tests))
+        result = run_async_in_sync(grammo_test_mcp(code, tests))
         
         if not isinstance(result, dict):
             logger.error("❌ [TOOL ERROR] Invalid result format")
@@ -113,15 +85,17 @@ def build_ollama_llm(model: str = "gpt-oss-20b", base_url: str = "http://localho
 
 def _init_original_code(state: TesterState) -> dict:
     """Snapshot the original code before testing begins."""
-    if state.get("original_code"):
-        return {}
-    code = (state.get("code") or "").strip()
-    logger.info(f"🎬 [INIT] Starting session. Code length: {len(code)}")
-    return {
-        "original_code": code, 
+    updates = {
         "max_test_attempts": int(state.get("max_test_attempts", 3)), 
         "test_attempts": 0
     }
+    
+    if not state.get("original_code"):
+        code = (state.get("code") or "").strip()
+        logger.info(f"🎬 [INIT] Starting session. Code length: {len(code)}")
+        updates["original_code"] = code
+        
+    return updates
 
 def tester_generate(ctx: TesterContext, state: TesterState) -> dict:
     """Generates tests, or patches code and re-tests."""

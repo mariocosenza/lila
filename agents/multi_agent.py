@@ -19,6 +19,8 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langgraph.graph.message import add_messages
 
+from utils import is_retryable_error, extract_retry_delay
+
 logger = logging.getLogger("gemini_retry")
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
@@ -70,57 +72,6 @@ class AgentState(TypedDict, total=False):
     max_global_iters: int
 
 
-def _is_retryable_error(exception: Exception) -> bool:
-    """
-    Check if the exception is a ResourceExhausted error, 
-    even if wrapped inside a LangChain exception.
-    """
-    # 1. Direct Google Exception
-    if isinstance(exception, ResourceExhausted):
-        return True
-        
-    # 2. Wrapped Exception (e.g. ChatGoogleGenerativeAIError)
-    # Check the cause
-    if hasattr(exception, "__cause__") and isinstance(exception.__cause__, ResourceExhausted):
-        return True
-        
-    # 3. String fallback (if imports fail or wrapper is obscure)
-    # The error message usually contains "RESOURCE_EXHAUSTED" or code 429
-    msg = str(exception)
-    if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
-        return True
-        
-    return False
-
-
-def _extract_retry_delay(exception: Exception, default_delay: float = None) -> float | None:
-    """
-    Attempts to extract the requested retry delay from an exception 
-    (or its underlying cause).
-    """
-    if not exception:
-        return default_delay
-
-    # Scan both the wrapper message and the original cause message
-    messages_to_check = [str(exception)]
-    if hasattr(exception, "__cause__") and exception.__cause__:
-        messages_to_check.append(str(exception.__cause__))
-
-    # Pattern for "Please retry in 22.1920s"
-    pattern = r"Please retry in ([0-9\.]+)s"
-    
-    for msg in messages_to_check:
-        match = re.search(pattern, msg)
-        if match:
-            try:
-                val = float(match.group(1))
-                return val
-            except ValueError:
-                pass
-
-    return default_delay
-
-
 class wait_dynamic_gemini(wait_base):
     """
     Custom tenacity wait strategy.
@@ -135,7 +86,7 @@ class wait_dynamic_gemini(wait_base):
         exc = retry_state.outcome.exception()
         
         # Try to find specific delay from Google
-        extracted_delay = _extract_retry_delay(exc)
+        extracted_delay = extract_retry_delay(exc)
         
         if extracted_delay is not None:
             # Add a buffer (1s) to be safe
@@ -242,7 +193,7 @@ class _GeminiSafeWrapper:
     # We now use `retry_if_exception` with our custom checker to catch wrapped errors.
 
     @retry(
-        retry=retry_if_exception(_is_retryable_error),
+        retry=retry_if_exception(is_retryable_error),
         wait=wait_dynamic_gemini(
             fallback_wait=wait_exponential(multiplier=2, min=2, max=60)
         ),
@@ -254,7 +205,7 @@ class _GeminiSafeWrapper:
         return method(*args, **kwargs)
 
     @retry(
-        retry=retry_if_exception(_is_retryable_error),
+        retry=retry_if_exception(is_retryable_error),
         wait=wait_dynamic_gemini(
             fallback_wait=wait_exponential(multiplier=2, min=2, max=60)
         ),
@@ -301,12 +252,12 @@ class _GeminiSafeWrapper:
             **kwargs
         )
 
-    def _get_retry_sleep_time(self, e: Exception) -> float:
-        """Calculate sleep time for retry, preferring API-suggested delay."""
-        delay = _extract_retry_delay(e)
-        if delay:
+    def _get_retry_sleep_time(self, exception: Exception, attempt: int = 1) -> float:
+        delay = extract_retry_delay(exception)
+        if delay is not None:
             return delay + 1.0
-        return min(60, 2 * (2 ** (getattr(self, "_stream_attempt", 1) - 1)))
+        # Exponential backoff fallback: 2 * 2^(attempt-1)
+        return min(60, 2 * (2 ** (attempt - 1)))
 
     def stream(self, input: Any, config: dict | None = None, **kwargs: Any):
         attempt = 0
@@ -317,12 +268,12 @@ class _GeminiSafeWrapper:
                 yield from self._llm.stream(self._sanitize_messages(input), config=config, **kwargs)
                 break
             except Exception as e:
-                if _is_retryable_error(e):
+                if is_retryable_error(e):
                     attempt += 1
                     if attempt >= max_attempts:
                         raise
                     
-                    sleep_time = self._get_retry_sleep_time(e)
+                    sleep_time = self._get_retry_sleep_time(e, attempt)
                     logger.debug(f"Caught ResourceExhausted (Stream Attempt {attempt}). Retrying in {sleep_time:.2f}s...")
                     time.sleep(sleep_time)
                 else:
@@ -339,12 +290,12 @@ class _GeminiSafeWrapper:
                     yield chunk
                 break
             except Exception as e:
-                if _is_retryable_error(e):
+                if is_retryable_error(e):
                     attempt += 1
                     if attempt >= max_attempts:
                         raise
                     
-                    sleep_time = self._get_retry_sleep_time(e)
+                    sleep_time = self._get_retry_sleep_time(e, attempt)
                     logger.debug(f"Caught ResourceExhausted (Async Stream Attempt {attempt}). Retrying in {sleep_time:.2f}s...")
                     await asyncio.sleep(sleep_time)
                 else:

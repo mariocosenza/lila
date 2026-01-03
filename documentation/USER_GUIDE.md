@@ -33,18 +33,28 @@ LILA richiede un backend LLM. Puoi usare **Google Gemini** (Cloud) o **Ollama** 
 
 Crea un file `.env` nella directory principale:
 
-**Opzione A: Google Gemini (Consigliato per le migliori prestazioni)**
+**Opzione A: Google Gemini (Consigliato)**
+Ideale per le migliori prestazioni, specialmente per task complessi che richiedono tool calling affidabile.
 ```env
 GOOGLE_API_KEY=la_tua_chiave_api_reale_qui
+# Modelli supportati: gemini-3-pro, gemini-3-flash, gemini-2.5
 ```
 
 **Opzione B: LLM Locale (Ollama)**
-Assicurati di avere [Ollama](https://ollama.com/) installato e in esecuzione.
+Per esecuzione offline o privata. Richiede hardware adeguato (GPU).
+Assicurati di avere [Ollama](https://ollama.com/) installato.
+
 ```env
 USE_LOCAL_LLM=true
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gpt-oss:20b  # O llama3, mistral, ecc.
+# Modelli consigliati:
+# - gemma3:27b (Buon bilanciamento, ma richiede gestione prompt specifica integrata in LILA)
+# - gpt-oss-20b (Supporto sperimentale)
+OLLAMA_MODEL=gemma3:27b
 ```
+
+### Nota sui Modelli Locali (Gemma 3)
+Se usi `gemma3:27b`, LILA applica automaticamente delle patch ai messaggi (unendo il System Prompt nel messaggio User) poiché questo modello non supporta nativamente i System Prompts. Le prestazioni potrebbero essere inferiori rispetto a Gemini 3 Pro nella generazione di sintassi Grammo complessa.
 
 ---
 

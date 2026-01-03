@@ -1,11 +1,33 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, TypedDict, Optional, List
 
 from fastmcp import Client
 
 MCP_URL = "http://127.0.0.1:8000/mcp"
+
+
+class SyntaxCheckResult(TypedDict):
+    is_valid: bool
+    error_type: Optional[str]
+    line: Optional[int]
+    column: Optional[int]
+    message: Optional[str]
+    context: Optional[str]
+    expected: Optional[List[str]]
+
+class CompilationResult(TypedDict):
+    compiled: bool
+    info: str
+    warning: str
+    errors: str
+
+class TestResult(TypedDict):
+    passed: bool
+    stdout: str
+    stderr: str
+
 
 
 def _try_pydantic_dump(raw: Any) -> Any:
@@ -106,19 +128,19 @@ def _normalize_tool_result(raw: Any) -> Any:
     return _parse_json_or_string(merged)
 
 
-async def grammo_lark_mcp(code: str) -> Any:
+async def grammo_lark_mcp(code: str) -> SyntaxCheckResult:
     async with Client(MCP_URL) as client:
         raw = await client.call_tool("grammo_lark", {"code": code})
         return _normalize_tool_result(raw)
 
 
-async def grammo_compiler_mcp(code: str) -> Any:
+async def grammo_compiler_mcp(code: str) -> CompilationResult:
     async with Client(MCP_URL) as client:
         raw = await client.call_tool("grammo_compiler", {"code": code})
         return _normalize_tool_result(raw)
 
 
-async def grammo_test_mcp(code: str, tests: str) -> Any:
+async def grammo_test_mcp(code: str, tests: str) -> TestResult:
     async with Client(MCP_URL) as client:
         raw = await client.call_tool("grammo_test", {"code": code, "tests": tests})
         return _normalize_tool_result(raw)

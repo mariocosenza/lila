@@ -124,6 +124,12 @@ func void -> main() {
 }
 ```
 
+### Credits & Documentation
+The Grammo language was created by **Salvatore Di Martino**.
+For the official documentation and theoretical background, please refer to the original repository:
+- **Repository**: [saldm04/Grammo](https://github.com/saldm04/Grammo)
+- **Documentation**: [Grammo Documents](https://github.com/saldm04/Grammo/tree/main/Documents) (Includes Lexical, Syntactic, and Semantic Analysis, and LLVM Code Generation specs).
+
 ---
 
 ## 🤝 Contributing

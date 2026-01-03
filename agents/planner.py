@@ -7,9 +7,10 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 
 from multi_agent import AgentState
+from utils import clean_json_text
 from prompts.planner_prompts import (
     MAKE_PLAN_SYSTEM_PROMPT,
     REVISE_PLAN_SYSTEM_MESSAGE,
@@ -17,17 +18,7 @@ from prompts.planner_prompts import (
     build_ask_approval_message
 )
 
-# --- Helper Functions ---
-
-def _clean_json_text(text: str) -> str:
-    """Cleans code fences and other noise from JSON output."""
-    text = text.strip()
-    # Remove markdown code blocks if present
-    if "```" in text:
-        match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
-        if match:
-            text = match.group(1).strip()
-    return text
+# --- Planner Node Definitions ---
 
 def _try_json_parse_list(text: str) -> list[str]:
     """Attempt to parse JSON as list or dict with 'steps'."""
@@ -68,7 +59,7 @@ def _parse_plan_json(text: str | list) -> list[str]:
                 raw += item.get("text", "")
         text = raw
     
-    text = _clean_json_text(str(text))
+    text = clean_json_text(str(text))
     
     # 2. Try JSON parsing first
     plan = _try_json_parse_list(text)
@@ -181,6 +172,18 @@ def generator_no_stream_node(generator_subgraph: Any, state: AgentState, config:
     return generator_subgraph.invoke(state, config=_config_with_stream(config, False))
 
 
+class GeneratorNodeWrapper:
+    """Wrapper to avoid partial signature issues with LangGraph."""
+    def __init__(self, generator_subgraph: Any):
+        self.generator_subgraph = generator_subgraph
+
+    def __call__(self, state: AgentState, config: RunnableConfig | None = None) -> dict:
+        return generator_no_stream_node(self.generator_subgraph, state, config)
+
+def _wrap_generator_node(generator_subgraph: Any):
+    return GeneratorNodeWrapper(generator_subgraph)
+
+
 # --- Routing Functions ---
 
 def entry_route(state: AgentState) -> str:
@@ -215,7 +218,7 @@ def build_planner_subgraph(llm: Any, generator_subgraph: Any) -> StateGraph:
     g.add_node("advance", advance_node)
     
     # Generator Integration
-    g.add_node("generator_no_stream", partial(generator_no_stream_node, generator_subgraph))
+    g.add_node("generator_no_stream", _wrap_generator_node(generator_subgraph))
 
     # --- Edges ---
     g.add_edge(START, "entry")

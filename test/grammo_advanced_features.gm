@@ -1,0 +1,19 @@
+func void -> main() {
+    var int: i = 5;
+    var real: r;
+    var string: s;
+
+    // Implicit coercion int -> real
+    // Grammo allows mixing int and real in arithmetic expressions
+    r = i + 2.5; 
+    <<! "Coercion result (5 + 2.5): " # (r);
+
+    // String concatenation
+    // Grammo uses '+' for string concatenation
+    s = "Hello" + " " + "World";
+    <<! "Concatenation result: " # (s);
+    
+    if (r > 5) {
+        <<! "Real comparison works" # (r);
+    }
+}

@@ -87,8 +87,30 @@ LILA usa MCP per esporre strumenti all'LLM.
 - **Server**: `mcp/server.py` ospita strumenti come `grammo_lark` (checker sintattico) e `grammo_compile` (compilatore).
 - **Client**: Gli agenti si connettono a questo server per eseguire questi strumenti in sicurezza.
 
-## 🧠 Integrazione LLM
+## 🧠 Integrazione LLM e Performance
 
-LILA supporta un approccio a doppio motore:
-- **Google Gemini Pro**: Usato per ragionamento di alto livello, pianificazione e debugging complesso.
-- **Ollama (Locale)**: Può essere attivato per esecuzione focalizzata sulla privacy o offline.
+LILA supporta un approccio flessibile ai modelli linguistici, bilanciando potenza cloud e privacy locale.
+
+### 1. Google Gemini (Cloud)
+- **Modelli**: Gemini 2.5, Gemini 3 Pro, Gemini 3 Flash.
+- **Punti di Forza**:
+  - **Tool Calling Nativo**: Supporto eccellente per l'uso di strumenti MCP.
+  - **System Prompts**: Supporto nativo per istruzioni di sistema complesse.
+  - **Performance**: Risultati superiori nella generazione di sintassi Grammo corretta.
+  - **Finestra di Contesto**: La finestra di contesto estesa di Gemini 3 permette di mantenere in memoria l'intera specifica del linguaggio Grammo e la cronologia di debugging senza perdita di informazioni.
+
+### 2. Ollama (Locale)
+- **Modelli Testati**: `gemma3:27b`, `gpt-oss-20b`.
+- **Adattamenti Architetturali**:
+  - **Gemma 3 27b**: Sebbene potente, questo modello può avere limitazioni nel supporto nativo per i *System Prompts* separati in alcune implementazioni di Ollama. L'architettura di LILA gestisce questo unendo le istruzioni di sistema nel primo messaggio utente (`_merge_system_for_gemma` in `multi_agent.py`).
+  - **Tool Calling**: Per modelli come `gpt-oss-20b` che potrebbero non avere un supporto tool nativo robusto, LILA implementa strategie di fallback o parsing dell'output strutturato, permettendo l'uso di strumenti anche senza API dedicate.
+
+### 3. Benchmark e Limitazioni (Pass@k)
+I test condotti (vedi `test/pass_k_results.json`) evidenziano le sfide di generare codice in un linguaggio custom (`Grammo`) senza fine-tuning specifico.
+
+- **Fibonacci**: Alto tasso di successo (Pass@20: 100%). Il pattern algoritmico è comune e il modello riesce ad adattarlo alla sintassi.
+- **Calcolatrice / Fattoriale**: Tassi di successo inferiori (0% in alcuni run zero-shot). Questo indica che per logiche che richiedono I/O specifico o strutture di controllo annidate, i modelli generalisti faticano a rispettare rigorosamente la grammatica Grammo senza iterazioni di correzione (Debugger).
+
+**Confronto Modelli**:
+- **Gemini 3 Pro/Flash**: Mostrano una capacità di auto-correzione nettamente superiore nel ciclo Generator -> Compiler -> Debugger. Gemini 3 Flash offre un eccellente compromesso velocità/costo per iterazioni rapide.
+- **Gemma 3 27b**: Tende a "dimenticare" le regole sintattiche specifiche (come l'I/O `>>` e `<<`) nei contesti lunghi, richiedendo più iterazioni del Debugger. Tuttavia, per task a singolo file, offre prestazioni sorprendenti per un modello locale.
