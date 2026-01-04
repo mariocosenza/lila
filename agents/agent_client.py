@@ -2,6 +2,20 @@ from __future__ import annotations
 
 import uuid
 import warnings
+
+# --- 1. Deprecation Warnings ---
+# Silence warnings BEFORE importing other modules that might trigger them
+warnings.filterwarnings(
+    "ignore", 
+    message=".*datetime.datetime.utcfromtimestamp().*", 
+    category=DeprecationWarning
+)
+warnings.filterwarnings(
+    "ignore", 
+    message=".*support for `datetime.datetime.utcfromtimestamp()`.*", 
+    category=DeprecationWarning
+)
+
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -15,19 +29,6 @@ from rich.theme import Theme
 # LangChain / Graph imports
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from orchestrator import build_app, check_tester_service, TESTER_URL
-
-# --- 1. Deprecation Warnings ---
-# Silence the specific datetime warning and Pydantic-related ones
-warnings.filterwarnings(
-    "ignore", 
-    message=".*datetime.datetime.utcfromtimestamp().*", 
-    category=DeprecationWarning
-)
-warnings.filterwarnings(
-    "ignore", 
-    message=".*support for `datetime.datetime.utcfromtimestamp()`.*", 
-    category=DeprecationWarning
-)
 
 # --- 2. UI Configuration ---
 custom_theme = Theme({

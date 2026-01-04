@@ -8,7 +8,7 @@ from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception,  
+    retry_if_exception_type,  
     RetryCallState
 )
 from tenacity.wait import wait_base
@@ -19,7 +19,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langgraph.graph.message import add_messages
 
-from utils import is_retryable_error, extract_retry_delay
+from utils import is_retryable_error, extract_retry_delay, RetryableLLMError
 
 logger = logging.getLogger("gemini_retry")
 handler = logging.StreamHandler()
@@ -190,10 +190,10 @@ class _GeminiSafeWrapper:
         return valid_msgs
 
     # ---- Retry Logic ----
-    # We now use `retry_if_exception` with our custom checker to catch wrapped errors.
+    # We now use `retry_if_exception_type` with our custom marker to catch wrapped errors.
 
     @retry(
-        retry=retry_if_exception(is_retryable_error),
+        retry=retry_if_exception_type((ResourceExhausted, RetryableLLMError)),
         wait=wait_dynamic_gemini(
             fallback_wait=wait_exponential(multiplier=2, min=2, max=60)
         ),
@@ -202,10 +202,17 @@ class _GeminiSafeWrapper:
     )
     def _execute_with_retry(self, method_name: str, *args, **kwargs):
         method = getattr(self._llm, method_name)
-        return method(*args, **kwargs)
+        try:
+            return method(*args, **kwargs)
+        except Exception as exc:
+            if isinstance(exc, ResourceExhausted):
+                raise
+            if is_retryable_error(exc):
+                raise RetryableLLMError(exc) from exc
+            raise
 
     @retry(
-        retry=retry_if_exception(is_retryable_error),
+        retry=retry_if_exception_type((ResourceExhausted, RetryableLLMError)),
         wait=wait_dynamic_gemini(
             fallback_wait=wait_exponential(multiplier=2, min=2, max=60)
         ),
@@ -214,7 +221,14 @@ class _GeminiSafeWrapper:
     )
     async def _aexecute_with_retry(self, method_name: str, *args, **kwargs):
         method = getattr(self._llm, method_name)
-        return await method(*args, **kwargs)
+        try:
+            return await method(*args, **kwargs)
+        except Exception as exc:
+            if isinstance(exc, ResourceExhausted):
+                raise
+            if is_retryable_error(exc):
+                raise RetryableLLMError(exc) from exc
+            raise
 
     # ---- Runnable / ChatModel interface methods (delegated) ----
 

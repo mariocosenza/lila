@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Any
+from typing import Any
 from integrator import GRAMMO_LARK_SPEC
 
 TESTER_SYSTEM_CONTENT = (
@@ -27,7 +27,7 @@ def build_initial_test_prompt(code: str) -> str:
         "Generate comprehensive tests and call `run_grammo_tests`."
     )
 
-def build_debug_test_prompt(last_result: Dict[str, Any], current_tests: str, code: str) -> str:
+def build_debug_test_prompt(last_result: dict[str, Any], current_tests: str, code: str) -> str:
     return (
         "⚠️ PREVIOUS TESTS FAILED.\n"
         "Review the output below. Determine if the error is in the **Code** (logic bug) or the **Test** (syntax/format error).\n\n"

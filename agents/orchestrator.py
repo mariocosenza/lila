@@ -5,8 +5,10 @@ import os
 import logging
 import requests
 import re
+from copy import deepcopy
+from difflib import SequenceMatcher
 from functools import partial
-from typing import Any, Literal
+from typing import Any
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
@@ -28,6 +30,128 @@ logger = logging.getLogger("orchestrator")
 # Service URLs
 TESTER_URL = os.getenv("TESTER_URL", "http://127.0.0.1:8088/invoke")
 TESTER_HEALTH_URL = os.getenv("TESTER_HEALTH", "http://127.0.0.1:8088/health")
+
+TASK_RESET_DEFAULTS: dict[str, Any] = {
+    "plan": [],
+    "plan_step": 0,
+    "awaiting_approval": False,
+    "code": "",
+    "assembled_code": "",
+    "compile_attempts": 0,
+    "compile_result": {},
+    "compile_errors": [],
+    "tests": "",
+    "test_result": {},
+    "validated_code": "",
+    "validation_summary": "",
+    "diagnostics": [],
+    "workspace": {},
+    "safety_notes": "",
+    "run_tests": False,
+}
+
+TASK_ARTIFACT_KEYS = (
+    "code",
+    "assembled_code",
+    "plan",
+    "validated_code",
+    "compile_result",
+    "tests",
+    "test_result",
+)
+
+REFINEMENT_KEYWORDS = (
+    "refine",
+    "refinement",
+    "improve",
+    "improvement",
+    "fix",
+    "fixing",
+    "bug",
+    "bugs",
+    "debug",
+    "update",
+    "upgrade",
+    "change",
+    "adjust",
+    "tweak",
+    "optimize",
+    "optimize",
+    "extend",
+    "extension",
+    "enhance",
+    "aggiungi",
+    "aggiungere",
+    "migliora",
+    "migliorare",
+    "correggi",
+    "correggere",
+    "sistema",
+    "sistemare",
+    "riusa",
+    "riutilizza",
+    "reuse",
+    "continue",
+    "continua",
+    "mantieni",
+    "espandi",
+    "expand",
+)
+
+
+def _normalize_text(val: str) -> str:
+    return (val or "").strip().lower()
+
+
+def _looks_like_refinement(task: str) -> bool:
+    text = _normalize_text(task)
+    if not text:
+        return False
+    return any(keyword in text for keyword in REFINEMENT_KEYWORDS)
+
+
+def _has_prior_artifacts(state: AgentState) -> bool:
+    for key in TASK_ARTIFACT_KEYS:
+        value = state.get(key)
+        if isinstance(value, dict) and value:
+            return True
+        if isinstance(value, list) and value:
+            return True
+        if not isinstance(value, (dict, list)) and value:
+            return True
+    return False
+
+
+def _similar_to_previous_task(task: str, state: AgentState, threshold: float = 0.78) -> bool:
+    previous = _normalize_text(state.get("original_task") or state.get("task") or "")
+    current = _normalize_text(task)
+    if not previous or not current:
+        return False
+    return SequenceMatcher(None, current, previous).ratio() >= threshold
+
+
+def _should_reset_task_state(task: str, state: AgentState) -> bool:
+    if not task:
+        return False
+    if state.get("awaiting_approval"):
+        return False
+    if not _has_prior_artifacts(state):
+        return False
+    if _looks_like_refinement(task):
+        return False
+    if _similar_to_previous_task(task, state):
+        return False
+    return True
+
+
+def _build_task_reset_patch() -> dict[str, Any]:
+    patch: dict[str, Any] = {}
+    for key, default_value in TASK_RESET_DEFAULTS.items():
+        if isinstance(default_value, (dict, list)):
+            patch[key] = deepcopy(default_value)
+        else:
+            patch[key] = default_value
+    return patch
 
 # ==========================================
 # 1. UTILITIES
@@ -62,10 +186,20 @@ def router_node(llm, state: AgentState) -> dict:
     last_msg = state["messages"][-1] if state.get("messages") else None
     task = (getattr(last_msg, "content", "") or "").strip()
 
+    reset_patch: dict[str, Any] = {}
+    if _should_reset_task_state(task, state):
+        logger.info("♻️ Router: detected new task intent. Clearing previous artifacts.")
+        reset_patch = _build_task_reset_patch()
+
     # 2. Check for Planner Loop (Awaiting Approval)
     if state.get("awaiting_approval", False):
         logger.info("🔄 Router: Returning to Planner (Awaiting Approval)")
-        return {"route": "planner", "task": task, "planner_used": True}
+        return {
+            **reset_patch,
+            "route": "planner",
+            "task": task,
+            "planner_used": True,
+        }
 
     # 3. Check for Explicit User Overrides (User explicitly asking for tests)
     lower_task = task.lower()
@@ -104,6 +238,7 @@ def router_node(llm, state: AgentState) -> dict:
     final_run_tests = True if user_explicitly_wants_tests else llm_thinks_test_needed
 
     return {
+        **reset_patch,
         "route": route, 
         "task": task, 
         "planner_used": (route == "planner"),

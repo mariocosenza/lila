@@ -2,9 +2,16 @@ import asyncio
 import threading
 import re
 import json
-from typing import Any, Optional
-from tenacity import retry_if_exception
+from typing import Any
 from google.api_core.exceptions import ResourceExhausted
+
+
+class RetryableLLMError(Exception):
+    """Marker exception to let Tenacity retry wrapped ResourceExhausted signals."""
+
+    def __init__(self, original: Exception):
+        super().__init__(str(original))
+        self.original = original
 
 # ==========================================
 # 1. String & Code Sanitization
