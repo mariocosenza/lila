@@ -3,8 +3,6 @@ from __future__ import annotations
 import uuid
 import warnings
 
-# --- 1. Deprecation Warnings ---
-# Silence warnings BEFORE importing other modules that might trigger them
 warnings.filterwarnings(
     "ignore", 
     message=".*datetime.datetime.utcfromtimestamp().*", 
@@ -30,7 +28,6 @@ from rich.theme import Theme
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from orchestrator import build_app, check_tester_service, TESTER_URL
 
-# --- 2. UI Configuration ---
 custom_theme = Theme({
     "info": "dim cyan",
     "warning": "magenta",

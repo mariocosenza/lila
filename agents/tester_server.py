@@ -10,11 +10,9 @@ from pydantic import BaseModel, Field
 
 from langchain_core.messages import HumanMessage
 
-# Import the new Ollama-based graph builder
 from tester import build_tester_graph
 from prompts.tester_prompts import build_tester_server_invoke_prompt
 
-# --- Data Models ---
 class A2ARequest(BaseModel):
     task: str = Field(default="", description="Optional testing goal")
     code: str = Field(..., description="Grammo source code to test")
@@ -23,7 +21,6 @@ class A2AResponse(BaseModel):
     tests: str
     result: dict[str, Any]
 
-# --- Router & Handlers ---
 router = APIRouter()
 
 @router.get("/health")
@@ -67,7 +64,6 @@ def invoke(req: A2ARequest, request: Request) -> A2AResponse:
         print(f"❌ Error during invocation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- App Definition ---
 def create_app() -> FastAPI:
     app = FastAPI(title="Tester A2A Server (Ollama Edition)")
 
@@ -96,7 +92,6 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
-# --- SERVER STARTUP ---
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8088))
     print(f"🚀 Starting Tester Server on port {port}...")

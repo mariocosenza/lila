@@ -33,10 +33,8 @@ class AgentState(TypedDict, total=False):
     """
     Shared state for all agents (Orchestrator, Generator, Planner, Tester, DebuggerEvaluator).
     """
-    # Message History
     messages: Annotated[list[BaseMessage], add_messages]
     
-    # Task Routing & Planning
     route: str
     task: str
     original_task: str
@@ -45,27 +43,18 @@ class AgentState(TypedDict, total=False):
     plan: list[str]
     plan_step: int
     awaiting_approval: bool
-    run_tests: bool  # Flag to force testing
+    run_tests: bool
     
-    # --- Code Artifacts ---
     code: str           # Direct output from Generator
     assembled_code: str # Output from Integrator
-    
-    # --- Compilation State ---
     compile_attempts: int
     compile_result: dict[str, Any]
     compile_errors: list[str]
-    
-    # --- Testing State ---
     tests: str
     test_result: dict[str, Any]
-    
-    # --- Validation & Finalization ---
     validated_code: str
     validation_summary: str
     safety_notes: str
-    
-    # --- Loop Control ---
     iterations: int
     max_iters: int
     global_iterations: int
@@ -189,9 +178,6 @@ class _GeminiSafeWrapper:
 
         return valid_msgs
 
-    # ---- Retry Logic ----
-    # We now use `retry_if_exception_type` with our custom marker to catch wrapped errors.
-
     @retry(
         retry=retry_if_exception_type((ResourceExhausted, RetryableLLMError)),
         wait=wait_dynamic_gemini(
@@ -229,8 +215,6 @@ class _GeminiSafeWrapper:
             if is_retryable_error(exc):
                 raise RetryableLLMError(exc) from exc
             raise
-
-    # ---- Runnable / ChatModel interface methods (delegated) ----
 
     def invoke(self, input: Any, config: dict | None = None, **kwargs: Any) -> Any:
         return self._execute_with_retry(

@@ -16,8 +16,6 @@ from prompts.planner_prompts import (
     build_ask_approval_message
 )
 
-# --- Planner Node Definitions ---
-
 def _try_json_parse_list(text: str) -> list[str]:
     """Attempt to parse JSON as list or dict with 'steps'."""
     try:
@@ -83,8 +81,6 @@ def _config_with_stream(config: RunnableConfig | None, stream_tokens: bool) -> R
     conf["stream_tokens"] = stream_tokens
     base["configurable"] = conf
     return base
-
-# --- Planner Node Definitions ---
 
 def make_plan_node(llm: Any, state: AgentState) -> dict:
     """Node to create the initial plan."""
@@ -182,8 +178,6 @@ def _wrap_generator_node(generator_subgraph: Any):
     return GeneratorNodeWrapper(generator_subgraph)
 
 
-# --- Routing Functions ---
-
 def entry_route(state: AgentState) -> str:
     return "handle_approval" if state.get("awaiting_approval", False) else "make_plan"
 
@@ -201,12 +195,9 @@ def should_continue_route(state: AgentState) -> str:
     return "loop" if i < len(plan) else "end"
 
 
-# --- Planner Subgraph ---
-
 def build_planner_subgraph(llm: Any, generator_subgraph: Any) -> StateGraph:
     g = StateGraph(AgentState)
 
-    # --- Nodes ---
     g.add_node("entry", lambda state: {})
     g.add_node("make_plan", partial(make_plan_node, llm))
     g.add_node("ask_approval", ask_approval_node)
@@ -215,10 +206,8 @@ def build_planner_subgraph(llm: Any, generator_subgraph: Any) -> StateGraph:
     g.add_node("set_next_subtask", set_next_subtask_node)
     g.add_node("advance", advance_node)
     
-    # Generator Integration
     g.add_node("generator_no_stream", _wrap_generator_node(generator_subgraph))
 
-    # --- Edges ---
     g.add_edge(START, "entry")
     g.add_conditional_edges("entry", entry_route, {
         "make_plan": "make_plan",

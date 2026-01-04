@@ -14,8 +14,6 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
 
-# --- Internal Imports ---
-# Assuming these modules exist in your project structure
 from generator import build_generator_subgraph
 from integrator import build_integrator_subgraph
 from multi_agent import AgentState, build_llm
@@ -23,11 +21,9 @@ from planner import build_planner_subgraph
 from debugger_evaluator import build_debugger_evaluator_subgraph
 from prompts.orchestrator_prompts import ROUTER_INSTRUCTIONS
 
-# --- Configuration ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("orchestrator")
 
-# Service URLs
 TESTER_URL = os.getenv("TESTER_URL", "http://127.0.0.1:8088/invoke")
 TESTER_HEALTH_URL = os.getenv("TESTER_HEALTH", "http://127.0.0.1:8088/health")
 
@@ -153,10 +149,6 @@ def _build_task_reset_patch() -> dict[str, Any]:
             patch[key] = default_value
     return patch
 
-# ==========================================
-# 1. UTILITIES
-# ==========================================
-
 def check_tester_service() -> bool:
     """
     Checks if the Tester FastAPI service is reachable.
@@ -173,16 +165,11 @@ def check_tester_service() -> bool:
         logger.warning(f"⚠️ Tester Service unreachable: {e}")
         return False
 
-# ==========================================
-# 2. CORE NODES
-# ==========================================
-
 def router_node(llm, state: AgentState) -> dict:
     """
     Decides the execution path (Generator vs Planner) and whether to run tests.
     """
     
-    # 1. Extract the latest task
     last_msg = state["messages"][-1] if state.get("messages") else None
     task = (getattr(last_msg, "content", "") or "").strip()
 
@@ -191,7 +178,6 @@ def router_node(llm, state: AgentState) -> dict:
         logger.info("♻️ Router: detected new task intent. Clearing previous artifacts.")
         reset_patch = _build_task_reset_patch()
 
-    # 2. Check for Planner Loop (Awaiting Approval)
     if state.get("awaiting_approval", False):
         logger.info("🔄 Router: Returning to Planner (Awaiting Approval)")
         return {
@@ -201,12 +187,9 @@ def router_node(llm, state: AgentState) -> dict:
             "planner_used": True,
         }
 
-    # 3. Check for Explicit User Overrides (User explicitly asking for tests)
     lower_task = task.lower()
     explicit_test_keywords = ["test", "verify", "check", "validate", "debug", "prove"]
     user_explicitly_wants_tests = any(w in lower_task for w in explicit_test_keywords)
-
-    # 4. Construct System Prompt
 
     try:
         # Invoke LLM using HumanMessage for the task
@@ -233,8 +216,6 @@ def router_node(llm, state: AgentState) -> dict:
         route = "generator"
         llm_thinks_test_needed = False
 
-    # 5. Final Decision Logic
-    # User intent overrides LLM conservatism
     final_run_tests = True if user_explicitly_wants_tests else llm_thinks_test_needed
 
     return {
@@ -287,10 +268,6 @@ def tester_node(state: AgentState) -> dict:
         logger.error(f"❌ Tester connection failed: {e}")
         return {"tester_error": str(e)}
 
-# ==========================================
-# 3. CONDITIONAL EDGES
-# ==========================================
-
 def pick_route(state: AgentState) -> str:
     return state.get("route", "generator")
 
@@ -311,14 +288,9 @@ def after_planner(state: AgentState) -> str:
         return "awaiting_approval"
     return "integrator"
 
-# ==========================================
-# 4. APP BUILDER
-# ==========================================
-
 def build_app():
     llm = build_llm()
     
-    # Build Subgraphs
     generator = build_generator_subgraph(llm)
     integrator = build_integrator_subgraph(llm)
     planner = build_planner_subgraph(llm, generator)
@@ -326,7 +298,6 @@ def build_app():
 
     g = StateGraph(AgentState)
     
-    # Add Nodes
     g.add_node("orchestrator", partial(router_node, llm))
     g.add_node("generator", generator)
     g.add_node("planner", planner)
@@ -334,37 +305,28 @@ def build_app():
     g.add_node("tester", tester_node)
     g.add_node("debugger_evaluator", debugger_evaluator)
 
-    # Add Edges
     g.add_edge(START, "orchestrator")
     
-    # Orchestrator Decisions
     g.add_conditional_edges("orchestrator", pick_route, {
         "generator": "generator", 
         "planner": "planner", 
         "other": END
     })
     
-    # Generator Post-Processing
     g.add_conditional_edges("generator", after_generator, {
         "tester": "tester", 
         "debugger_evaluator": "debugger_evaluator"
     })
     
-    # Planner Flow
     g.add_conditional_edges("planner", after_planner, {
         "integrator": "integrator", 
         "awaiting_approval": END
     })
     
-    # Integrator always goes to Tester (if part of planner flow, usually extensive)
-    # Note: You might want to apply the same logic as 'after_generator' here if strict,
-    # but usually integrated multi-file code *should* be tested.
     g.add_edge("integrator", "tester")
     
-    # Tester always goes to Evaluator
     g.add_edge("tester", "debugger_evaluator")
     
-    # Evaluator is the end
     g.add_edge("debugger_evaluator", END)
 
     return g.compile(checkpointer=MemorySaver())
