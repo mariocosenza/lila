@@ -184,10 +184,14 @@ def generator_compile(state: GeneratorState) -> dict:
     max_retries = int(state.get("max_iters", 5))
     
     if (not compiled) and attempts < max_retries:
+        failure_msg = build_generator_compile_failure_message(errors)
+        # Instruct the agent to look for examples if compilation failed
+        failure_msg += (
+            "\n\nSyntax Hint: You can use 'grammo_list_examples' and 'grammo_read_example' "
+            "to check how standard constructs are implemented. Use the examples only as a syntax reference."
+        )
         out["messages"] = [
-            HumanMessage(
-                content=build_generator_compile_failure_message(errors)
-            )
+            HumanMessage(content=failure_msg)
         ]
 
     return out
