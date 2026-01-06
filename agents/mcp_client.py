@@ -204,3 +204,15 @@ async def grammo_test_mcp(code: str, tests: str) -> TestResult:
     async with _create_client() as client:
         raw = await client.call_tool("grammo_test", {"code": code, "tests": tests})
         return _normalize_tool_result(raw)
+
+
+async def grammo_list_examples_mcp() -> list[str]:
+    async with _create_client() as client:
+        raw = await client.call_tool("grammo_list_examples")
+        return _normalize_tool_result(raw)
+
+
+async def grammo_read_example_mcp(filename: str) -> str:
+    async with _create_client() as client:
+        raw = await client.call_tool("grammo_read_example", filename=filename)
+        return _normalize_tool_result(raw)

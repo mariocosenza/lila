@@ -11,18 +11,17 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from mcp_client import grammo_compiler_mcp, grammo_lark_mcp
+from mcp_client import (
+    grammo_compiler_mcp, 
+    grammo_lark_mcp, 
+    grammo_list_examples_mcp, 
+    grammo_read_example_mcp
+)
 from prompts.generator_prompts import GRAMMO_SYSTEM, build_generator_compile_failure_message
 from utils import sanitize_grammo_source, run_async_in_sync
 import re
 
-# ==========================================
-# 1. Grammar Specification (FULL)
-# ==========================================
 
-# ==========================================
-# 2. Helper Functions
-# ==========================================
 
 class GrammoCode(BaseModel):
     code: str = Field(
@@ -32,9 +31,7 @@ class GrammoCode(BaseModel):
         )
     )
 
-# ==========================================
-# 3. Tools
-# ==========================================
+
 
 @tool("grammo_lark", args_schema=GrammoCode)
 def grammo_lark(code: str) -> str:
@@ -63,14 +60,32 @@ def grammo_compile(code: str) -> dict[str, str]:
         "errors": str(result.get("errors", "") or ""),
     }
 
-    
 
-TOOLS = [grammo_lark, grammo_compile]
+@tool("grammo_list_examples")
+def grammo_list_examples() -> str:
+    """
+    List available Grammo example files.
+    """
+    result = run_async_in_sync(grammo_list_examples_mcp())
+    return f"Available examples: {result}"
 
 
-# ==========================================
-# 4. State & Prompts
-# ==========================================
+class ExampleFile(BaseModel):
+    filename: str = Field(description="The name of the example file to read")
+
+
+@tool("grammo_read_example", args_schema=ExampleFile)
+def grammo_read_example(filename: str) -> str:
+    """
+    Read the content of a specific Grammo example file.
+    """
+    result = run_async_in_sync(grammo_read_example_mcp(filename))
+    return f"Content of {filename}:\n{result}"
+
+
+TOOLS = [grammo_lark, grammo_compile, grammo_list_examples, grammo_read_example]
+
+
 
 class GeneratorState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]

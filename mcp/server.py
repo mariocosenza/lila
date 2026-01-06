@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Annotated, Optional, List
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
@@ -63,6 +64,38 @@ def tester(
 ) -> TestResult:
     result = run_tests(code, tests)
     return TestResult(**result)
+
+EXAMPLES_DIR = Path(__file__).parent / "grammo" / "src" / "grammo" / "test"
+
+@mcp.tool(
+    name="grammo_list_examples",
+    description="List available Grammo example files",
+    enabled=True,
+)
+def list_examples() -> List[str]:
+    if not EXAMPLES_DIR.exists():
+        return []
+    return [f.name for f in EXAMPLES_DIR.glob("*.gm")]
+
+@mcp.tool(
+    name="grammo_read_example",
+    description="Read the content of a specific Grammo example file",
+    enabled=True,
+)
+def read_example(filename: Annotated[str, "The name of the example file to read"]) -> str:
+    file_path = EXAMPLES_DIR / filename
+    # Simple security check to ensure we don't go outside the directory
+    try:
+        resolved_path = file_path.resolve()
+        resolved_examples_dir = EXAMPLES_DIR.resolve()
+        if not resolved_path.is_relative_to(resolved_examples_dir):
+            return "Error: Invalid file path (must be within examples directory)"
+    except Exception as e:
+         return f"Error: Invalid path resolution: {e}"
+
+    if not file_path.exists():
+        return f"Error: File {filename} not found"
+    return file_path.read_text(encoding="utf-8")
 
 if __name__ == "__main__":
     mcp.run(

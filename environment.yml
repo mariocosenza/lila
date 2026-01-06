@@ -20,3 +20,9 @@ dependencies:
     - fastapi
     - python-dotenv
     - pytest
+    - rich
+    - httpx
+    - google-api-core
+    - wsproto
+    - langchain-google-genai
+
