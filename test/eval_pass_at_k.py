@@ -1,12 +1,12 @@
 """
 Pass@K Evaluation Script
-Calcola la metrica pass@k (k=5,10,20) per tre compiti:
-1. Calcolatrice (add, sub, mul, div)
-2. Fattoriale
+Calculates the pass@k metric (k=5,10,20) for three tasks:
+1. Calculator (add, sub, mul, div)
+2. Factorial
 3. Fibonacci
 
 Pass@K = 1 - (C(n-c, k) / C(n, k))
-Dove n=numero campioni, c=campioni corretti
+Where n=number of samples, c=correct samples
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from typing import List, Dict, Any
 from math import comb
 from dataclasses import dataclass
 
-# Aggiungi agents al path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agents"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcp"))
 
@@ -103,19 +102,18 @@ class PassKResult:
 
 def calculate_pass_at_k(num_correct: int, num_samples: int, k: int) -> float:
     """
-    Calcola pass@k usando la formula:
+    Calculates pass@k using the formula:
     pass@k = 1 - C(n-c, k) / C(n, k)
     
     Args:
-        num_correct: numero di campioni corretti
-        num_samples: numero totale di campioni
-        k: numero di tentativi
+        num_correct: number of correct samples
+        num_samples: total number of samples
+        k: number of attempts
     
     Returns:
-        pass@k come valore tra 0 e 1
+        pass@k as a value between 0 and 1
     """
     if num_samples < k:
-        # Se abbiamo meno campioni di k, usiamo solo quelli disponibili
         return 1.0 if num_correct > 0 else 0.0
     
     if num_correct == 0:
@@ -124,17 +122,17 @@ def calculate_pass_at_k(num_correct: int, num_samples: int, k: int) -> float:
     if num_correct == num_samples:
         return 1.0
     
-    # Formula: 1 - C(n-c, k) / C(n, k)
+
     try:
         return 1.0 - (comb(num_samples - num_correct, k) / comb(num_samples, k))
     except Exception:
-        # Fallback se la combinazione non è calcolabile
+        # Fallback if the combination is not calculable
         return 1.0 if num_correct > 0 else 0.0
 
 
 def check_compilation(code: str) -> bool:
     """
-    Verifica se il codice Grammo compila usando grammo_compile.
+    Checks if Grammo code compiles using grammo_compile.
     """
     try:
         result = grammo_compile.invoke({"code": code})
@@ -146,7 +144,7 @@ def check_compilation(code: str) -> bool:
 
 async def generate_samples(app, task_prompt: str, num_samples: int) -> List[str]:
     """
-    Genera num_samples campioni usando l'agent.
+    Generates num_samples samples using the agent.
     """
     samples = []
     
@@ -161,7 +159,7 @@ async def generate_samples(app, task_prompt: str, num_samples: int) -> List[str]
                 config={"configurable": {"stream_tokens": False, "thread_id": thread_id}}
             )
             
-            # Estrai il codice generato
+            # Extract generated code
             code = result.get("code") or result.get("assembled_code", "")
             
             if code and len(code.strip()) > 10:
@@ -183,21 +181,21 @@ async def evaluate_task(
     num_samples: int = 20
 ) -> PassKResult:
     """
-    Valuta un task generando campioni e verificando la compilazione.
+    Evaluates a task by generating samples and checking compilation.
     """
     print(f"\n{'='*60}")
     print(f"Task: {task_name}")
     print(f"{'='*60}")
     print(f"Generating {num_samples} samples...")
     
-    # Genera campioni
+    # Generate samples
     samples = await generate_samples(app, task_prompt, num_samples)
     num_generated = len(samples)
     
     print(f"\n✅ Generated {num_generated} samples")
     print("Checking compilation...")
     
-    # Verifica compilazione
+    # Check compilation
     num_compiled = 0
     for i, code in enumerate(samples):
         compiled = check_compilation(code)
@@ -207,7 +205,7 @@ async def evaluate_task(
         else:
             print(f"  Sample {i+1}: ❌ Failed")
     
-    # Calcola pass@k
+    # Calculate pass@k
     pass_at_5 = calculate_pass_at_k(num_compiled, num_generated, 5)
     pass_at_10 = calculate_pass_at_k(num_compiled, num_generated, 10)
     pass_at_20 = calculate_pass_at_k(num_compiled, num_generated, 20)
@@ -226,14 +224,14 @@ async def evaluate_task(
 
 async def main():
     """
-    Main entry point per valutare tutti i task.
+    Main entry point to evaluate all tasks.
     """
     print("\n" + "="*60)
     print("PASS@K EVALUATION")
-    print("Valutazione su: Calcolatrice, Fattoriale, Fibonacci")
+    print("Evaluation on: Calculator, Factorial, Fibonacci")
     print("="*60)
     
-    # Build app
+
     print("\nBuilding orchestrator app...")
     try:
         app = build_app()
@@ -242,10 +240,10 @@ async def main():
         print(f"❌ Failed to build app: {e}")
         return
     
-    # Parametri
-    num_samples = 20  # Generiamo 20 campioni per calcolare pass@5, @10, @20
+ 
+    num_samples = 20 
     
-    # Valuta tutti i task
+
     results: List[PassKResult] = []
     
     for task_key, task_config in TASKS.items():
@@ -257,7 +255,7 @@ async def main():
         )
         results.append(result)
     
-    # Stampa risultati finali
+
     print("\n" + "="*60)
     print("FINAL RESULTS")
     print("="*60)
@@ -265,7 +263,7 @@ async def main():
     for result in results:
         print(result)
     
-    # Stampa summary
+
     print(f"\n{'='*60}")
     print("SUMMARY")
     print(f"{'='*60}")
@@ -273,7 +271,7 @@ async def main():
     for result in results:
         print(f"{result.task_name:15} | Pass@5: {result.pass_at_5:6.2%} | Pass@10: {result.pass_at_10:6.2%} | Pass@20: {result.pass_at_20:6.2%}")
     
-    # Calcola medie
+
     avg_pass_at_5 = sum(r.pass_at_5 for r in results) / len(results)
     avg_pass_at_10 = sum(r.pass_at_10 for r in results) / len(results)
     avg_pass_at_20 = sum(r.pass_at_20 for r in results) / len(results)
@@ -282,7 +280,7 @@ async def main():
     print(f"{'Average':15} | Pass@5: {avg_pass_at_5:6.2%} | Pass@10: {avg_pass_at_10:6.2%} | Pass@20: {avg_pass_at_20:6.2%}")
     print(f"{'='*60}")
     
-    # Salva risultati in JSON
+
     output_file = Path(__file__).parent / "pass_k_results.json"
     results_dict = {
         "tasks": [
