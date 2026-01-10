@@ -1,0 +1,62 @@
+{
+  "summary": {
+    "success_rate": 0.75,
+    "avg_latency": 59.655614733695984,
+    "avg_tokens": 1,
+    "avg_tool_calls": 2.75
+  },
+  "details": [
+    {
+      "task_name": "Factorial",
+      "success": true,
+      "latency_seconds": 51.798956632614136,
+      "steps": 7,
+      "estimated_tokens": 1,
+      "tool_calls": 3,
+      "tool_errors": 0,
+      "compilation_success": true,
+      "iterations": 3,
+      "output_length": 163,
+      "constraint_violation": false
+    },
+    {
+      "task_name": "Fibonacci",
+      "success": true,
+      "latency_seconds": 27.114149570465088,
+      "steps": 3,
+      "estimated_tokens": 1,
+      "tool_calls": 1,
+      "tool_errors": 0,
+      "compilation_success": true,
+      "iterations": 1,
+      "output_length": 230,
+      "constraint_violation": false
+    },
+    {
+      "task_name": "GCD",
+      "success": false,
+      "latency_seconds": 106.04218673706055,
+      "steps": 19,
+      "estimated_tokens": 1,
+      "tool_calls": 5,
+      "tool_errors": 0,
+      "compilation_success": true,
+      "iterations": 5,
+      "output_length": 189,
+      "constraint_violation": false
+    },
+    {
+      "task_name": "IsPrime",
+      "success": true,
+      "latency_seconds": 53.667165994644165,
+      "steps": 5,
+      "estimated_tokens": 1,
+      "tool_calls": 2,
+      "tool_errors": 0,
+      "compilation_success": true,
+      "iterations": 2,
+      "output_length": 329,
+      "constraint_violation": false
+    }
+  ]
+}

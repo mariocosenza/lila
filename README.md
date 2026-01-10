@@ -103,7 +103,17 @@ Once services are running, you can interact with LILA:
 ```bash
 python agents/agent_client.py
 ```
+### 4. Running Evaluations
+LILA includes a comprehensive evaluation suite to measure performance, accuracy, and efficiency.
 
+```bash
+# Run the Pass@k benchmark (Compilation checks)
+python test/eval_pass_at_k.py
+
+# Run the Comprehensive Functional Evaluation (Professor's Metrics)
+# Measures Success Rate, Latency, Tokens, Tool Usage
+python test/eval_comprehensive.py
+```
 ---
 
 ## 📝 The Grammo Language
