@@ -75,7 +75,7 @@ class TesterState(TypedDict, total=False):
 class TesterContext:
     llm_with_tools: object
 
-def build_ollama_llm(model: str = "gpt-oss-20b", base_url: str = "http://localhost:11434") -> object:
+def build_ollama_llm(model: str = "gpt-oss:20b", base_url: str = "http://localhost:11434") -> object:
     logger.info(f"🔌 Connecting to Ollama: {base_url} (Model: {model})")
     return ChatOllama(
         model=model,
@@ -207,7 +207,7 @@ def tester_after_collect(state: TesterState) -> Literal["generate", "__end__"]:
     logger.info("🔄 [RETRY] Tests failed. Looping back to generator.")
     return "generate"
 
-def build_tester_graph(ollama_model: str = "gpt-oss-20b", ollama_base_url: str = "http://localhost:11434"):
+def build_tester_graph(ollama_model: str = "gpt-oss:20b", ollama_base_url: str = "http://localhost:11434"):
     """Compiles the LangGraph state machine using Ollama."""
     
     llm = build_ollama_llm(model=ollama_model, base_url=ollama_base_url)

@@ -49,7 +49,7 @@ USE_LOCAL_LLM=true
 OLLAMA_BASE_URL=http://localhost:11434
 # Modelli consigliati:
 # - gemma3:27b (Buon bilanciamento, ma richiede gestione prompt specifica integrata in LILA)
-# - gpt-oss-20b (Supporto sperimentale)
+# - gpt-oss:20b (Supporto sperimentale)
 OLLAMA_MODEL=gemma3:27b
 ```
 

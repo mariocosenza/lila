@@ -100,10 +100,10 @@ LILA supporta un approccio flessibile ai modelli linguistici, bilanciando potenz
   - **Finestra di Contesto**: La finestra di contesto estesa di Gemini 3 permette di mantenere in memoria l'intera specifica del linguaggio Grammo e la cronologia di debugging senza perdita di informazioni.
 
 ### 2. Ollama (Locale)
-- **Modelli Testati**: `gemma3:27b`, `gpt-oss-20b`.
+- **Modelli Testati**: `gemma3:27b`, `gpt-oss:20b`.
 - **Adattamenti Architetturali**:
   - **Gemma 3 27b**: Sebbene potente, questo modello può avere limitazioni nel supporto nativo per i *System Prompts* separati in alcune implementazioni di Ollama. L'architettura di LILA gestisce questo unendo le istruzioni di sistema nel primo messaggio utente (`_merge_system_for_gemma` in `multi_agent.py`).
-  - **Tool Calling**: Per modelli come `gpt-oss-20b` che potrebbero non avere un supporto tool nativo robusto, LILA implementa strategie di fallback o parsing dell'output strutturato, permettendo l'uso di strumenti anche senza API dedicate.
+  - **Tool Calling**: Per modelli come `gpt-oss:20b` che potrebbero non avere un supporto tool nativo robusto, LILA implementa strategie di fallback o parsing dell'output strutturato, permettendo l'uso di strumenti anche senza API dedicate.
 
 ### 3. Benchmark e Limitazioni (Pass@k)
 I test condotti (vedi `test/pass_k_results.json`) evidenziano le sfide di generare codice in un linguaggio custom (`Grammo`) senza fine-tuning specifico.

@@ -68,7 +68,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Tester A2A Server (Ollama Edition)")
 
     # Configuration via Environment Variables
-    ollama_model = os.getenv("OLLAMA_MODEL", "gpt-oss-20b")
+    ollama_model = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
     ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     
     print(f"🔄 Building Tester Graph with Ollama model: {ollama_model} at {ollama_base_url}...")
