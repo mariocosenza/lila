@@ -63,7 +63,7 @@ def tester(
     result = run_tests(code, tests)
     return TestResult(**result)
 
-EXAMPLES_DIR = Path(__file__).parent / "grammo" / "src" / "grammo" / "test"
+EXAMPLES_DIR = Path(__file__).parent / "grammo" / "src" / "grammo" / "test" / "input"
 
 @mcp.tool(
     name="grammo_list_examples",

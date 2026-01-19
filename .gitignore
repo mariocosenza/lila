@@ -9,3 +9,8 @@ mcp/grammo/src/grammo/output-llvm
 mcp/grammo/src/grammo/lex_syntax
 mcp/grammo/src/grammo/main.py
 mcp/grammo/semantic_specification.md
+mcp/grammo/Documents
+mcp/grammo-0
+mcp/grammo/README.md
+mcp/grammo/src/grammo/commands.txt
+mcp/grammo/src/grammo/requirements.txt
