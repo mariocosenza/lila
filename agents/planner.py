@@ -36,16 +36,14 @@ def _parse_numbered_list(text: str) -> list[str]:
         line = line.strip()
         if not line:
             continue
-        # Remove "1.", "-", "*", etc.
         line = re.sub(r"^[\d\.\-\*\•\)]+\s*", "", line)
-        if len(line) > 5:  # Filter out noise
+        if len(line) > 5: 
             lines.append(line)
-    return lines[:10]  # Cap at 10 steps
+    return lines[:10] 
 
 
 def _parse_plan_json(text: str | list) -> list[str]:
     """Robustly parses the plan from LLM output."""
-    # 1. Handle weird list outputs from some adapters
     if isinstance(text, list):
         raw = ""
         for item in text:
@@ -57,12 +55,10 @@ def _parse_plan_json(text: str | list) -> list[str]:
     
     text = clean_json_text(str(text))
     
-    # 2. Try JSON parsing first
     plan = _try_json_parse_list(text)
     if plan:
         return plan
 
-    # 3. Fallback: Line parsing (if model gave a numbered list instead of JSON)
     return _parse_numbered_list(text)
 
 def _is_yes(s: str) -> bool:
@@ -86,11 +82,9 @@ def make_plan_node(llm: Any, state: AgentState) -> dict:
     """Node to create the initial plan."""
     original = (state.get("task") or "").strip()
 
-    # Strong System Prompt with Examples (Few-Shot)
     resp = llm.invoke([SystemMessage(content=MAKE_PLAN_SYSTEM_PROMPT), SystemMessage(content=original)])
     plan = _parse_plan_json(resp.content)
     
-    # Safety Check: If plan is still empty or identical to input (Lazy Model), force split
     if not plan or (len(plan) == 1 and len(plan[0]) > len(original) * 0.8):
         if "game" in original.lower():
             plan = [

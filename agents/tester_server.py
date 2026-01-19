@@ -44,16 +44,13 @@ def invoke(req: A2ARequest, request: Request) -> A2AResponse:
 
     print(f"📩 Received request for task: {req.task[:50]}...")
 
-    # Construct the initial message for the Tester Agent
     msg = HumanMessage(
         content=build_tester_server_invoke_prompt(req.task)
     )
 
     try:
-        # Invoke the local graph
         final_state = graph.invoke({"messages": [msg], "code": req.code})
         
-        # Extract results from the final state
         tests = (final_state.get("tests") or "").strip()
         result = final_state.get("test_result") or {}
         
@@ -67,7 +64,7 @@ def invoke(req: A2ARequest, request: Request) -> A2AResponse:
 def create_app() -> FastAPI:
     app = FastAPI(title="Tester A2A Server (Ollama Edition)")
 
-    # Configuration via Environment Variables
+
     ollama_model = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
     ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     

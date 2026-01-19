@@ -45,8 +45,8 @@ class AgentState(TypedDict, total=False):
     awaiting_approval: bool
     run_tests: bool
     
-    code: str           # Direct output from Generator
-    assembled_code: str # Output from Integrator
+    code: str          
+    assembled_code: str 
     compile_attempts: int
     compile_result: dict[str, Any]
     compile_errors: list[str]
@@ -74,11 +74,9 @@ class wait_dynamic_gemini(wait_base):
     def __call__(self, retry_state: RetryCallState) -> float:
         exc = retry_state.outcome.exception()
         
-        # Try to find specific delay from Google
         extracted_delay = extract_retry_delay(exc)
         
         if extracted_delay is not None:
-            # Add a buffer (1s) to be safe
             actual_wait = extracted_delay + 1.0
             logger.debug(f"API requested wait of {extracted_delay}s. Sleeping for {actual_wait:.2f}s.")
             return actual_wait
@@ -143,7 +141,6 @@ class _GeminiSafeWrapper:
         return chat_msgs
 
     def _sanitize_messages(self, inp: Any) -> Any:
-        # PromptValue-like objects
         if hasattr(inp, "to_messages") and callable(getattr(inp, "to_messages")):
             try:
                 inp = inp.to_messages()
@@ -153,7 +150,6 @@ class _GeminiSafeWrapper:
         if not isinstance(inp, list):
             return inp
 
-        # 1. Filter empty messages
         valid_msgs: list[BaseMessage] = []
         for m in inp:
             content = getattr(m, "content", None)
@@ -161,14 +157,14 @@ class _GeminiSafeWrapper:
                 continue
             valid_msgs.append(m)
 
-        # 2. Handle Gemma Specifics
+
         model_name = getattr(self._llm, "model", "").lower()
         if "gemma" in model_name:
             valid_msgs = self._merge_system_for_gemma(valid_msgs)
 
         fallback = os.getenv("GEMINI_FALLBACK_PROMPT", "Continue.")
 
-        # 3. Final safety checks
+
         if not valid_msgs:
             return [HumanMessage(content=fallback)]
 
@@ -183,7 +179,7 @@ class _GeminiSafeWrapper:
         wait=wait_dynamic_gemini(
             fallback_wait=wait_exponential(multiplier=2, min=2, max=60)
         ),
-        stop=stop_after_attempt(12), # Increased attempt count for longer TPM waits
+        stop=stop_after_attempt(12), 
         before_sleep=_log_retry
     )
     def _execute_with_retry(self, method_name: str, *args, **kwargs):
@@ -320,7 +316,6 @@ def build_llm(*, use_gemini: bool = None):
     """
     Build and return the chat model.
     """
-    # If not explicitly set, check environment variable
     if use_gemini is None:
         use_local = os.getenv("USE_LOCAL_LLM", "false").lower() == "true"
         use_gemini = not use_local

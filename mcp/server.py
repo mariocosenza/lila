@@ -32,7 +32,6 @@ class TestResult(BaseModel):
     stdout: str = Field("", description="Standard output from test execution")
     stderr: str = Field("", description="Standard error from test execution")
 
-# --- Tools ---
 
 @mcp.tool(
     name="grammo_lark",
@@ -41,7 +40,6 @@ class TestResult(BaseModel):
 )
 def syntax_checker(code: Annotated[str, "The generated Grammo Code"]) -> SyntaxCheckResult:
     result = parser_instance.validate(code)
-    # Ensure the result dict matches the model fields
     return SyntaxCheckResult(**result)
 
 @mcp.tool(

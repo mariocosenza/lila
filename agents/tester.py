@@ -117,10 +117,8 @@ def tester_generate(ctx: TesterContext, state: TesterState) -> dict:
         logger.info("   ↳ Debugging failure from previous run.")
         prompt_text = build_debug_test_prompt(last_result, current_tests, code)
 
-    # Invoke Ollama
     response = ctx.llm_with_tools.invoke([*msgs, HumanMessage(content=prompt_text)])
     
-    # Log concise summary of response
     if response.tool_calls:
         logger.info(f"   ↳ Generated Tool Call: {response.tool_calls[0]['name']}")
     else:

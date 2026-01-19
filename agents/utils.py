@@ -12,9 +12,7 @@ class RetryableLLMError(Exception):
         super().__init__(str(original))
         self.original = original
 
-# ==========================================
-# 1. String & Code Sanitization
-# ==========================================
+
 
 def sanitize_grammo_source(text: str) -> str:
     """Best-effort sanitizer to ensure only Grammo source is returned.
@@ -29,7 +27,6 @@ def sanitize_grammo_source(text: str) -> str:
     if not s:
         return ""
 
-    # Strip markdown code fences if present.
     if '```' in s:
         m = re.search(r"```(?:\w+)?\s*\n(.*?)\n```", s, flags=re.DOTALL)
         if m:
@@ -37,7 +34,6 @@ def sanitize_grammo_source(text: str) -> str:
         else:
             s = s.replace('```', '').strip()
 
-    # Drop leading natural-language / meta lines until we hit 'func' or 'var'.
     lines = s.splitlines()
     start_idx = None
     for i, line in enumerate(lines):
@@ -57,7 +53,6 @@ def sanitize_grammo_source(text: str) -> str:
 def clean_json_text(text: str) -> str:
     """Cleans code fences and other noise from JSON output."""
     text = str(text).strip()
-    # Remove markdown code blocks if present
     if "```" in text:
         match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
         if match:
@@ -65,9 +60,7 @@ def clean_json_text(text: str) -> str:
     return text
 
 
-# ==========================================
-# 2. Async Helper
-# ==========================================
+
 
 def _target_sync(coro, res: dict[str, Any]):
     try:
@@ -103,24 +96,19 @@ def run_async_in_sync(coro):
         return res.get("value")
 
 
-# ==========================================
-# 3. Retry Logic
-# ==========================================
+
 
 def is_retryable_error(exception: Exception) -> bool:
     """
     Check if the exception is a ResourceExhausted error, 
     even if wrapped inside a LangChain exception.
     """
-    # 1. Direct Google Exception
     if isinstance(exception, ResourceExhausted):
         return True
         
-    # 2. Wrapped Exception (e.g. ChatGoogleGenerativeAIError)
     if hasattr(exception, "__cause__") and isinstance(exception.__cause__, ResourceExhausted):
         return True
         
-    # 3. String fallback
     msg = str(exception)
     if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
         return True
@@ -134,12 +122,10 @@ def extract_retry_delay(exception: Exception, default_delay: float = None) -> fl
     if not exception:
         return default_delay
 
-    # Scan both the wrapper message and the original cause message
     messages_to_check = [str(exception)]
     if hasattr(exception, "__cause__") and exception.__cause__:
         messages_to_check.append(str(exception.__cause__))
 
-    # Pattern for "Please retry in 22.1920s"
     pattern = r"Please retry in ([0-9\.]+)s"
     
     for msg in messages_to_check:

@@ -39,8 +39,8 @@ class DebuggerEvaluatorState(TypedDict, total=False):
 
     validated_code: str
     validation_summary: str
-    test_summary: str  # New field to store the text summary of tests
-    error_summary: str # New field to store the text summary of compilation errors
+    test_summary: str 
+    error_summary: str 
 
     global_iterations: int
     max_global_iters: int
@@ -81,7 +81,6 @@ def _parse_debugger_evaluator_output(text: str) -> tuple[str, str, str, str]:
             # Stop if we hit hallucinated grammar spec
             break
         else:
-            # Keep line if it's not a header
             clean_lines.append(line)
 
     text = "\n".join(clean_lines).strip()
@@ -94,7 +93,6 @@ def _parse_debugger_evaluator_output(text: str) -> tuple[str, str, str, str]:
             return summary, test_summary, error_summary, code
 
     # 3. Fallback: Return whatever is left after stripping headers
-    # Strip leading empty lines
     code = text.strip()
     
     return summary, test_summary, error_summary, code
@@ -209,8 +207,8 @@ def debugger_evaluator_finalize(state: DebuggerEvaluatorState) -> dict:
 
     return {
         "validation_summary": summary,
-        "test_summary": test_summary, # Captured in state
-        "error_summary": error_summary, # Captured in state
+        "test_summary": test_summary, 
+        "error_summary": error_summary, 
         "code": code or _get_candidate_code(state),
         "assembled_code": code or state.get("assembled_code", ""),
     }
@@ -222,15 +220,14 @@ def reset_iterations(state: DebuggerEvaluatorState) -> dict:
     new_global = global_iters + current_iters
     
     if new_global > int(state.get("max_global_iters", 30)):
-        # Force exit by setting iteration_count high
         return {"iteration_count": 999, "global_iterations": new_global}
         
     # Reset local counters for the evaluator session
     return {
         "iteration_count": 0, 
         "global_iterations": new_global,
-        "compile_attempts": 0,  # Reset compile attempts so we don't exit immediately
-        "compile_errors": []    # Optional: clear previous errors to start fresh debugging
+        "compile_attempts": 0, 
+        "compile_errors": []    
     }
 
 
