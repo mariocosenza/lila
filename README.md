@@ -6,70 +6,70 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.0.5-orange?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active_Development-success?style=for-the-badge)
 
-**LILA** is an advanced, autonomous multi-agent coding system designed to master **Grammo**, a custom programming language that compiles to LLVM IR. 
+**LILA** è un sistema multi-agente autonomo avanzato progettato per padroneggiare **Grammo**, un linguaggio di programmazione custom che compila in LLVM IR.
 
-Built on top of **LangGraph** and **Model Context Protocol (MCP)**, LILA orchestrates a team of specialized AI agents that plan, write, compile, test, and debug code iteratively until the user's requirements are met.
-
----
-
-## 🚀 Features
-
-- **🤖 Multi-Agent Architecture**: A coordinated swarm of agents (Orchestrator, Planner, Generator, Integrator, Tester, Debugger) working together.
-- **📝 Grammo Language Support**: Native understanding of the Grammo syntax (Lark-based) and compilation pipeline (LLVM IR).
-- **🔄 Self-Healing Workflow**: Agents automatically analyze compiler errors and test failures to fix their own code.
-- **🔌 Model Context Protocol (MCP)**: Standardized server-client architecture for tool exposure and execution.
-- **🧠 Flexible Brain**: Supports **Google Gemini Pro** for high-reasoning tasks and **Ollama** for local, privacy-focused execution.
-- **🧪 Automated Testing**: Integrated test runner that executes generated code against test cases and reports results back to the agents.
+Basato su **LangGraph** e **Model Context Protocol (MCP)**, LILA orchestra un team di agenti AI specializzati che pianificano, scrivono, compilano, testano e correggono codice in modo iterativo fino a soddisfare i requisiti dell’utente.
 
 ---
 
-## 🏗️ Architecture
+## 🚀 Caratteristiche principali
 
-LILA operates as a state machine graph where nodes represent agents or tools:
-
-1.  **Orchestrator**: Analyzes the request and routes it (Generator vs Planner).
-2.  **Planner**: Decomposes complex tasks into step-by-step subtasks.
-3.  **Generator**: Writes Grammo code and fixes syntax errors.
-4.  **Integrator**: Assembles code fragments into a complete program.
-5.  **Tester**: Runs the compiled program against defined test cases.
-6.  **Debugger/Evaluator**: Analyzes failures and requests fixes or finalizes the output.
+- **🤖 Architettura Multi-Agente**: Orchestrator, Planner, Generator, Integrator, Tester, Debugger lavorano insieme.
+- **📝 Supporto nativo a Grammo**: Parsing, analisi e generazione codice per Grammo (basato su Lark, output LLVM IR).
+- **🔄 Workflow auto-riparante**: Gli agenti analizzano errori di compilazione e test, correggendo autonomamente il codice.
+- **🔌 Model Context Protocol (MCP)**: Architettura server-client standardizzata per l’esposizione e l’esecuzione di tool.
+- **🧠 Modelli flessibili**: Supporto a **Google Gemini Pro** (cloud) e **Ollama** (locale, privacy).
+- **🧪 Testing automatico**: Runner integrato che esegue i test e riporta i risultati agli agenti.
 
 ---
 
-## 🛠️ Installation
+## 🏗️ Architettura
 
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/mariocosenza/lila.git
-    cd lila
-    ```
+LILA funziona come una macchina a stati dove i nodi rappresentano agenti o strumenti:
 
-2.  **Create a virtual environment**
-    ```bash
-    python -m venv venv
-    # Windows
-    .\venv\Scripts\activate
-    # Linux/Mac
-    source venv/bin/activate
-    ```
-
-3.  **Install dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *(Note: Ensure you have `langchain`, `langgraph`, `lark`, `llvmlite`, etc. installed)*
+1.  **Orchestrator**: Analizza la richiesta e la smista (Generator o Planner).
+2.  **Planner**: Scompone task complessi in sottotask sequenziali.
+3.  **Generator**: Scrive codice Grammo e corregge errori di sintassi.
+4.  **Integrator**: Assembla i frammenti in un programma completo.
+5.  **Tester**: Esegue il programma compilato sui test case.
+6.  **Debugger/Evaluator**: Analizza i fallimenti e richiede correzioni o finalizza l’output.
 
 ---
 
-## ⚙️ Configuration
+## 🛠️ Requisiti e installazione
 
-Create a `.env` file or set environment variables:
+### Ambiente consigliato
+
+Si consiglia l’uso di **conda** (o Miniconda/Anaconda) per la gestione dell’ambiente Python e delle dipendenze.
+
+1. **Installa [Miniconda](https://docs.conda.io/en/latest/miniconda.html) o Anaconda** se non già presente.
+
+2. **Clona il repository**
+   ```bash
+   git clone https://github.com/mariocosenza/lila.git
+   cd lila
+   ```
+
+3. **Crea l’ambiente conda tramite environment.yml**
+   ```bash
+   conda env create -f environment.yml
+   conda activate lila
+   ```
+   Questo installerà tutte le dipendenze necessarie (Python, langchain, langgraph, lark, llvmlite, ecc.).
+
+> ⚠️ **Non usare requirements.txt**: tutte le dipendenze sono definite in `environment.yml`.
+
+---
+
+## ⚙️ Configurazione
+
+Configura le variabili d’ambiente (puoi usare un file `.env`):
 
 ```env
-# Required for Gemini (Default)
-GOOGLE_API_KEY=your_gemini_api_key
+# Necessario per Gemini (default)
+GOOGLE_API_KEY=la_tua_chiave_gemini
 
-# Optional: Use Local LLM (Ollama)
+# Opzionale: per usare LLM locale (Ollama)
 USE_LOCAL_LLM=false
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=gpt-oss:20b
@@ -77,89 +77,90 @@ OLLAMA_MODEL=gpt-oss:20b
 
 ---
 
-## 🏃 Usage
+## 🏃‍♂️ Avvio e utilizzo
 
-### 1. Start All Services (Interactive Mode)
-This script starts the MCP Server, the Tester Server, and launches the interactive Agent Client in the current terminal.
+### 1. Avvio completo (modalità interattiva)
+Questo script avvia MCP Server, Tester Server e il client interattivo nella stessa finestra:
 
 ```powershell
 .\start_all_services.ps1
 ```
 
-### 2. Start Services Only (Headless)
-If you want to run the client separately or just keep the backend running:
+### 2. Solo servizi backend (senza client)
+Per avviare solo i servizi e collegare il client separatamente:
 
 ```powershell
 # Default (Gemini)
 .\start_services_no_client.ps1
 
-# Use Local LLM
+# Per usare LLM locale
 .\start_services_no_client.ps1 -Local
 ```
 
-### 3. Agent Client
-Once services are running, you can interact with LILA:
+### 3. Avvio del client
+Quando i servizi sono attivi puoi interagire con LILA tramite:
 
 ```bash
 python agents/agent_client.py
 ```
-### 4. Running Evaluations
-LILA includes a comprehensive evaluation suite to measure performance, accuracy, and efficiency.
+
+### 4. Valutazione automatica
+LILA include una suite di valutazione per misurare performance, accuratezza ed efficienza:
 
 ```bash
-# Run the Pass@k benchmark (Compilation checks)
+# Pass@k benchmark (verifica compilazione)
 python test/eval_pass_at_k.py
 
-# Run the Comprehensive Functional Evaluation (Professor's Metrics)
-# Measures Success Rate, Latency, Tokens, Tool Usage
+# Valutazione funzionale completa (metriche docente)
 python test/eval_comprehensive.py
 ```
+
 ---
 
-## 📝 The Grammo Language
+## 📝 Il linguaggio Grammo
 
-Grammo is a C-like toy language designed for this project. It supports:
-- **Types**: `int`, `real`, `bool`, `string`, `void`
-- **Control Flow**: `if/elif/else`, `while`, `for`
-- **I/O**: `>>` (input) and `<<!` (output with newline)
-- **Functions**: `func type -> name(args) { ... }`
+Grammo è un linguaggio didattico stile C progettato per questo progetto. Supporta:
+- **Tipi**: `int`, `real`, `bool`, `string`, `void`
+- **Controllo di flusso**: `if/elif/else`, `while`, `for`
+- **I/O**: `>>` (input), `<<!` (output con newline)
+- **Funzioni**: `func tipo -> nome(args) { ... }`
 
-**Example:**
+**Esempio:**
 ```grammo
 func void -> main() {
-   var int: n, r;
-   >> "Enter number: " # (n);
-   r = factorial(n);
-   <<! "Result: " # (r);
+     var int: n, r;
+     >> "Inserisci numero: " # (n);
+     r = fattoriale(n);
+     <<! "Risultato: " # (r);
 }
 ```
 
-### Credits & Documentation
-The Grammo language was created by **Salvatore Di Martino**.
-For the official documentation and theoretical background, please refer to the original repository:
+### Crediti & Documentazione
+Il linguaggio Grammo è stato creato da **Salvatore Di Martino**.
+Per la documentazione ufficiale e la teoria, vedi:
 - **Repository**: [saldm04/Grammo](https://github.com/saldm04/Grammo)
-- **Documentation**: [Grammo Documents](https://github.com/saldm04/Grammo/tree/main/Documents) (Includes Lexical, Syntactic, and Semantic Analysis, and LLVM Code Generation specs).
+- **Documentazione**: [Grammo Documents](https://github.com/saldm04/Grammo/tree/main/Documents)
 
 ---
 
-## 🤝 Contributing
+## 🤝 Contribuire
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributi e segnalazioni sono benvenuti! Apri una Pull Request.
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Fai il fork del progetto
+2. Crea una branch (`git checkout -b feature/NomeFunzionalità`)
+3. Fai commit delle modifiche (`git commit -m 'Aggiunta funzionalità'`)
+4. Push sulla branch (`git push origin feature/NomeFunzionalità`)
+5. Apri una Pull Request
 
 ---
 
-## 📄 License
+## 📄 Licenza
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distribuito sotto licenza MIT. Vedi il file `LICENSE`.
 
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by Mario Cosenza</sub>
+    <sub>Realizzato con ❤️ da Mario Cosenza</sub>
 </div>

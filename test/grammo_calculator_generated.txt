@@ -1,0 +1,55 @@
+func real -> calculate(int: choice, real: num1, real: num2) {
+    var real: result;
+    if (choice == 1) {
+        result = num1 + num2;
+    } else if (choice == 2) {
+        result = num1 - num2;
+    } else if (choice == 3) {
+        result = num1 * num2;
+    } else if (choice == 4) {
+        if (num2 == 0.0) {
+            <<! "Error: Division by zero!" # ();
+            return 0.0;
+        }
+        result = num1 / num2;
+    } else {
+        <<! "Invalid choice." # ();
+        return 0.0;
+    }
+    return result;
+}
+
+func void -> main() {
+    var int: choice;
+    var real: num1, num2, result;
+    var string: menu;
+    var bool: running = true;
+
+    menu = "Choose an operation:\n";
+    menu = menu + "1. Addition\n";
+    menu = menu + "2. Subtraction\n";
+    menu = menu + "3. Multiplication\n";
+    menu = menu + "4. Division\n";
+    menu = menu + "5. Exit\n";
+
+    while (running) {
+        <<! menu # ();
+        >> "Enter your choice: " # (choice);
+
+        if (choice == 5) {
+            running = false;
+            <<! "Exiting program." # ();
+            return;
+        }
+
+        if (choice >= 1 && choice <= 4) {
+            >> "Enter first number: " # (num1);
+            >> "Enter second number: " # (num2);
+            result = calculate(choice, num1, num2);
+            <<! "Result: " # (result);
+        } else {
+            <<! "Invalid choice. Please try again." # ();
+        }
+    }
+    return;
+}

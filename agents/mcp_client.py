@@ -165,12 +165,10 @@ def _normalize_tool_result(raw: Any) -> Any:
     if isinstance(raw, dict):
         return raw
 
-    # Some versions return pydantic models
     pydantic_result = _try_pydantic_dump(raw)
     if pydantic_result is not None:
         return pydantic_result
 
-    # Some versions stash a dict directly
     attr_result = _try_direct_attributes(raw)
     if attr_result is not None:
         return attr_result

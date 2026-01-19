@@ -192,13 +192,11 @@ def router_node(llm, state: AgentState) -> dict:
     user_explicitly_wants_tests = any(w in lower_task for w in explicit_test_keywords)
 
     try:
-        # Invoke LLM using HumanMessage for the task
         resp = llm.invoke([
             SystemMessage(content=ROUTER_INSTRUCTIONS), 
             HumanMessage(content=task)
         ])
         
-        # Clean and Parse JSON
         raw = str(resp.content).strip()
         if "```" in raw:
             match = re.search(r"```(?:json)?\s*(.*?)```", raw, re.DOTALL)
@@ -241,7 +239,6 @@ def tester_node(state: AgentState) -> dict:
     logger.info(f"🚀 Calling Tester Service at {TESTER_URL}...")
     
     try:
-        # TIMEOUT set to None to allow infinite wait for local models
         resp = requests.post(
             TESTER_URL, 
             json={"task": task, "code": code}, 
@@ -275,7 +272,6 @@ def after_generator(state: AgentState) -> str:
     code = state.get("code") or state.get("assembled_code")
     run_tests = state.get("run_tests", False)
     
-    # Check if we have valid code AND tests are required
     if code and len(str(code).strip()) > 5 and run_tests:
         logger.info("👉 Routing to Tester (Code exists & run_tests=True)")
         return "tester"

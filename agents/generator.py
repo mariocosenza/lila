@@ -19,7 +19,6 @@ from mcp_client import (
 )
 from prompts.generator_prompts import GRAMMO_SYSTEM, build_generator_compile_failure_message
 from utils import sanitize_grammo_source, run_async_in_sync
-import re
 
 
 
@@ -49,7 +48,6 @@ def grammo_compile(code: str) -> dict[str, str]:
     """
     result = run_async_in_sync(grammo_compiler_mcp(code))
 
-    # Ensure a stable dict shape even if upstream returns weird types
     if not isinstance(result, dict):
         return {"compiled": False, "info": "", "warning": "", "errors": str(result)}
 
@@ -118,9 +116,6 @@ def generator_generate(ctx: GeneratorContext, state: GeneratorState) -> dict:
 
     code = sanitize_grammo_source(ai.content or "")
     
-    # If code is empty and no tool calls, try to recover by asking explicitly next time
-    # But we can't easily inject a message here without returning it.
-    # The next step (compile) will catch the empty code and inject the error message.
 
     return {
         "messages": [ai],
@@ -180,12 +175,10 @@ def generator_compile(state: GeneratorState) -> dict:
         "code": code
     }
 
-    # Use max_iters from state or default to 5
     max_retries = int(state.get("max_iters", 5))
     
     if (not compiled) and attempts < max_retries:
         failure_msg = build_generator_compile_failure_message(errors)
-        # Instruct the agent to look for examples if compilation failed
         failure_msg += (
             "\n\nSyntax Hint: You can use 'grammo_list_examples' and 'grammo_read_example' "
             "to check how standard constructs are implemented. Use the examples only as a syntax reference."
@@ -216,8 +209,6 @@ def reset_iterations(state: GeneratorState) -> dict:
     new_global = global_iters + current_iters
     
     if new_global > int(state.get("max_global_iters", 30)):
-        # Stop execution if global limit reached
-        # We can't easily stop the whole graph from here, but we can set max_iters to 0 to force exit
         return {
             "iterations": 0, 
             "global_iterations": new_global, 
