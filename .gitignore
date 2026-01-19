@@ -1,4 +1,11 @@
 .history
 .vscode
 __pycache__
-mcp/grammo
+mcp/grammo/src/grammo/__pycache__
+mcp/grammo/src/grammo/test
+mcp/grammo/src/grammo/semantic
+mcp/grammo/src/grammo/codegen
+mcp/grammo/src/grammo/output-llvm
+mcp/grammo/src/grammo/lex_syntax
+mcp/grammo/src/grammo/main.py
+mcp/grammo/semantic_specification.md
